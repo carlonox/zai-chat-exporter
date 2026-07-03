@@ -1,0 +1,14 @@
+{
+  "name": "zai-chat-exporter",
+  "version": "1.0.0",
+  "description": "Export your Z.ai conversations to JSON, Markdown, or plain text.",
+  "private": true,
+  "scripts": {
+    "build": "node resize-icons.js && node build.js",
+    "icons": "node resize-icons.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "sharp": "^0.35.3"
+  }
+}

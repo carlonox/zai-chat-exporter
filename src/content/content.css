@@ -1,0 +1,29 @@
+﻿/* 
+ * Z.ai Chat Exporter — content script styles
+ * Minimal overrides to integrate the export button into the Z.ai UI
+ */
+
+/* Subtle indicator that the exporter is active */
+.zai-exporter-detected {
+  position: fixed;
+  bottom: 8px;
+  right: 8px;
+  font-size: 10px;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 2px 8px;
+  border-radius: 10px;
+  z-index: 99999;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* Override for any injected button by the exporter */
+.zai-exporter-btn {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: background 0.15s ease;
+}
+
+.zai-exporter-btn:hover {
+  opacity: 0.9;
+}

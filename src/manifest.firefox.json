@@ -1,0 +1,51 @@
+{
+  "manifest_version": 2,
+  "name": "Z.ai Chat Exporter",
+  "version": "1.0.0",
+  "description": "Export your Z.ai conversations to JSON, Markdown, or plain text. Preserves reasoning, metadata, and message structure.",
+  "author": "Carlos Javier Cuervo",
+  "homepage_url": "https://github.com/carlonox/zai-chat-exporter",
+  "permissions": [
+    "https://chat.z.ai/*",
+    "storage",
+    "downloads"
+  ],
+  "browser_action": {
+    "default_icon": {
+      "48": "icons/icon48.png",
+      "96": "icons/icon96.png"
+    },
+    "default_title": "Z.ai Chat Exporter",
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "48": "icons/icon48.png",
+    "96": "icons/icon96.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chat.z.ai/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "zai-chat-exporter@carlonox",
+      "data_collection_permissions": false
+    }
+  }
+}

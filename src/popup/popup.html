@@ -1,0 +1,63 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Z.ai Chat Exporter</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Z.ai Exporter</h1>
+      <span class="version">v1.0.0</span>
+    </header>
+    <main>
+      <section class="section">
+        <label for="chatSelection">Chats to export:</label>
+        <select id="chatSelection">
+          <option value="last">Last conversation</option>
+          <option value="recent">Recent N (custom)</option>
+          <option value="all">All conversations</option>
+          <option value="current">Current open chat</option>
+          <option value="select">Select specific...</option>
+        </select>
+        <div id="recentCountWrapper" class="recent-count-wrapper" style="display:none">
+          <label for="recentCount">Number of chats:</label>
+          <input type="number" id="recentCount" value="20" min="1" max="1000" class="recent-count-input">
+        </div>
+      </section>
+      <section class="section">
+        <label for="formatSelection">Export format:</label>
+        <select id="formatSelection">
+          <option value="json">JSON (complete data)</option>
+          <option value="markdown">Markdown (readable)</option>
+          <option value="txt">Plain Text (simple)</option>
+        </select>
+      </section>
+      <section class="section options">
+        <label>Options:</label>
+        <div class="checkbox-group">
+          <input type="checkbox" id="includeReasoning" checked>
+          <label for="includeReasoning">Include reasoning</label>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="includeMetadata" checked>
+          <label for="includeMetadata">Include metadata</label>
+        </div>
+        <div class="checkbox-group">
+          <input type="checkbox" id="includeRaw" checked>
+          <label for="includeRaw">Include raw data</label>
+        </div>
+      </section>
+      <button id="exportBtn" class="export-button">Export</button>
+      <div id="status" class="status"></div>
+    </main>
+    <footer>
+      <a href="https://github.com/carlonox/zai-chat-exporter" target="_blank">GitHub</a>
+      <span> </span>
+      <a href="#" id="settingsLink">Settings</a>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

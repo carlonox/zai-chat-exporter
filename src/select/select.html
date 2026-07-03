@@ -1,0 +1,42 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Z.ai Chat Exporter - Select Chats</title>
+  <link rel="stylesheet" href="select.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Select Conversations</h1>
+      <span class="version">v1.0.0</span>
+    </header>
+    <main>
+      <div class="toolbar">
+        <input type="text" id="searchInput" placeholder="Search conversations..." class="search-input">
+      </div>
+      <div class="toolbar-actions">
+        <button id="selectAllBtn" class="action-btn">Select All</button>
+        <button id="deselectAllBtn" class="action-btn">Deselect All</button>
+        <span id="selectedCount" class="selected-count">0 selected</span>
+      </div>
+      <div class="chat-list" id="chatList">
+        <div class="loading">Loading conversations...</div>
+      </div>
+      <div class="export-bar">
+        <div class="format-selector">
+          <label for="selectFormat">Format:</label>
+          <select id="selectFormat">
+            <option value="json">JSON</option>
+            <option value="markdown">Markdown</option>
+            <option value="txt">Plain Text</option>
+          </select>
+        </div>
+        <button id="exportSelectedBtn" class="export-button" disabled>Export Selected (0)</button>
+      </div>
+      <div id="status" class="status"></div>
+    </main>
+  </div>
+  <script src="select.js"></script>
+</body>
+</html>
