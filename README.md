@@ -6,8 +6,7 @@
 
 [![Firefox Add-on](https://img.shields.io/badge/Firefox-Add--on-ff6600)](https://addons.mozilla.org/...)
 [![Edge Add-on](https://img.shields.io/badge/Edge-Add--on-0078D7)](https://microsoftedge.microsoft.com/...)
-[![GitHub license](https://img.shields.io/github/license/carlonox/zai-chat-exporter)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/carlonox/zai-chat-exporter)](https://github.com/carlonox/zai-chat-exporter/stargazers)
+[![GitHub license](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 > Export your Z.ai conversations to JSON, Markdown, or plain text. Preserves reasoning, metadata, and message structure.
 
@@ -15,9 +14,7 @@
 
 ## Why I built this
 
-I've been using Z.ai (formerly GLM) since its early days — it's a powerful platform, but there was no way to export conversations. I needed a reliable backup of my research discussions. After reverse-engineering the API (it's surprisingly clean — hats off to the Z.ai team), I realized the data model was straightforward enough to build an exporter in a weekend. What started as a personal script turned into this extension.
-
-If you're reading this: yes, I spent way too much time making the popup look good.
+I've been using Z.ai (for its GLM models) since its early days — it's a powerful platform, but there was no way to export conversations. I needed a reliable backup of my research discussions. After reverse-engineering the API (it's surprisingly clean — hats off to the Z.ai team), I realized the data model was straightforward enough to build an exporter in a weekend. What started as a personal script turned into this extension.
 
 ---
 
@@ -27,7 +24,7 @@ If you're reading this: yes, I spent way too much time making the popup look goo
 - Choose from **3 formats**: JSON (complete), Markdown (readable), Plain Text (simple)
 - Preserves **model reasoning** (thinking process)
 - Includes **metadata**: timestamps, token usage, model names
-- Works with **all Z.ai agents** (including GLM-5, GLM-4, etc.)
+- Works with **all Z.ai mode ls** (including GLM-5.x, GLM-4.x, etc.)
 - Lightweight and privacy-focused — all data stays in your browser
 
 ---
@@ -178,6 +175,6 @@ This project is licensed under the MIT License -- see the [LICENSE](LICENSE) fil
 
 ---
 
-> Built with heart for the Z.ai community. Found a bug? Want a feature? [Open an issue](https://github.com/carlonox/zai-chat-exporter/issues) -- I read every one.
+> Built with love for the Z.ai community. Found a bug? Want a feature? [Open an issue](https://github.com/carlonox/zai-chat-exporter/issues) -- I read every one.
 
 If the extension helps you, drop a star -- it helps others discover it too.
