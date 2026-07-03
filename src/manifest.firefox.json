@@ -45,7 +45,9 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "zai-chat-exporter@carlonox",
-      "data_collection_permissions": false
+      "data_collection_permissions": {
+        "required": "none"
+      }
     }
   }
 }
