@@ -1,6 +1,6 @@
 {
   "name": "zai-chat-exporter",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Export your Z.ai conversations to JSON, Markdown, or plain text.",
   "private": true,
   "scripts": {

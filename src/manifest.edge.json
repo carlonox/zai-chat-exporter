@@ -1,13 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Z.ai Chat Exporter",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Export your Z.ai conversations to JSON, Markdown, or plain text. Preserves reasoning, metadata, and message structure.",
   "author": "Carlos Javier Cuervo",
   "homepage_url": "https://github.com/carlonox/zai-chat-exporter",
   "permissions": [
-    "storage",
-    "downloads"
+    "storage"
   ],
   "host_permissions": [
     "https://chat.z.ai/*"
@@ -50,7 +49,7 @@
         "select/select.css"
       ],
       "matches": [
-        "<all_urls>"
+        "https://chat.z.ai/*"
       ]
     }
   ]
