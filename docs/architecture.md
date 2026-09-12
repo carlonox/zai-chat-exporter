@@ -12,7 +12,7 @@ The extension works by calling Z.ai's internal REST API directly from the browse
 
 ```text
 ┌──────────────┐     ┌──────────────────┐     ┌───────────────┐
-│   Popup UI    │────▶│   Background.js   │────▶│  Content.js   │
+│   Popup UI    │────>│   Background.js   │────>│  Content.js   │
 │  (popup.html) │     │  (MV2 page/MV3   │     │ (injected in  │
 │               │     │   service worker) │     │  chat.z.ai)   │
 └──────┬───────┘     └──────────────────┘     └───────┬───────┘
@@ -40,7 +40,7 @@ The popup is the main user interface. It provides:
 
 **Key decisions:**
 - We use a native <select> element rather than a custom dropdown to keep the bundle lightweight and accessible.
-- The popup imports from lib/api.js directly rather than routing through ackground.js because the API calls need access to the page's localStorage (for the auth token). Since the popup runs in its own extension context, it cannot directly access chat.z.ai's localStorage — that's why the "current chat" option uses chrome.tabs.query to extract the chat ID from the URL.
+- The popup imports from lib/api.js directly rather than routing through background.js because the API calls need access to the page's localStorage (for the auth token). Since the popup runs in its own extension context, it cannot directly access chat.z.ai's localStorage — that's why the "current chat" option uses chrome.tabs.query to extract the chat ID from the URL.
 
 ### 2. Background Script (src/background/)
 
@@ -60,11 +60,11 @@ The content script runs on chat.z.ai pages and:
 - Extracts the current chat ID from the page URL
 - Detects whether a chat container is present on the page
 
-**Why separate pi.js from content scripts?** The API module is designed to work both from the popup (for bulk operations like "all chats") and potentially from the content script. Keeping it isolated makes it testable and reusable.
+**Why separate api.js from content scripts?** The API module is designed to work both from the popup (for bulk operations like "all chats") and potentially from the content script. Keeping it isolated makes it testable and reusable.
 
 ### 4. Library (src/lib/)
 
-#### pi.js — Z.ai API Client
+#### api.js — Z.ai API Client
 
 The API client abstracts Z.ai's REST endpoints with three main functions:
 
@@ -105,8 +105,8 @@ General helpers that are not specific to Z.ai:
 ### Export Flow (e.g., "Export Recent 20 as Markdown")
 
 1. User clicks "Export" in popup
-2. popup.js calls getAllChats(1) from pi.js
-3. pi.js makes GET /chats/?page=1&type=default with Bearer token
+2. popup.js calls getAllChats(1) from api.js
+3. api.js makes GET /chats/?page=1&type=default with Bearer token
 4. Response is parsed and returned as an array of 20 chat objects
 5. popup.js applies filters based on checkbox options
 6. popup.js calls downloadExport(chats, 'markdown', filename) from exporters.js
@@ -124,7 +124,6 @@ General helpers that are not specific to Z.ai:
 
 ---
 
-
 ## Why esbuild?
 
 I chose `esbuild` over Webpack because it's faster and simpler for a single-page extension. If you need to add more complex features, Webpack might be a better fit — but for now, esbuild does the job with zero config.
@@ -132,6 +131,7 @@ I chose `esbuild` over Webpack because it's faster and simpler for a single-page
 ## Why `var` instead of `const`/`let`?
 
 The extension targets Firefox (MV2) and Chrome/Edge (MV3). `var` is the safest choice for maximum cross-browser compatibility without transpilation. If you refactor to `const`/`let`, make sure to test in both browsers.
+
 ## Browser Compatibility
 
 | Feature | Firefox (MV2) | Edge/Chrome (MV3) |
@@ -139,7 +139,7 @@ The extension targets Firefox (MV2) and Chrome/Edge (MV3). `var` is the safest c
 | Manifest | manifest.firefox.json | manifest.edge.json |
 | Background | Persistent page | Service worker |
 | Permissions | https://chat.z.ai/* in permissions | https://chat.z.ai/* in host_permissions |
-| API | rowser namespace | chrome namespace |
+| API | browser namespace | chrome namespace |
 
 The code uses chrome.* API consistently, which works in both Firefox (via polyfill/compat) and Chromium browsers.
 

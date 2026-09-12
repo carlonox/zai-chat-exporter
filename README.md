@@ -24,7 +24,7 @@ I've been using Z.ai (for its GLM models) since its early days — it's a powerf
 - Choose from **3 formats**: JSON (complete), Markdown (readable), Plain Text (simple)
 - Preserves **model reasoning** (thinking process)
 - Includes **metadata**: timestamps, token usage, model names
-- Works with **all Z.ai mode ls** (including GLM-5.x, GLM-4.x, etc.)
+- Works with **all Z.ai models** (including GLM-5.x, GLM-4.x, etc.)
 - Lightweight and privacy-focused — all data stays in your browser
 
 ---
