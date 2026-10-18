@@ -173,6 +173,51 @@ function _emptyPlaceholder(msg) {
   return "[Empty message (id: " + id + ", role: " + role + ")]";
 }
 
+// Detect "backslash-escaped HTML close tag" patterns like `\</details>` or
+// `\</summary>`. This is the specific bug pattern reported by users: the
+// raw API content (either msg.content or a content_block's content)
+// contains a backslash immediately before an HTML close tag, producing a
+// literal `\</details>` in the exported .md file.
+//
+// Why this happens (best hypothesis, confirmed against diagnostic tests):
+// Z.ai's API (or the model itself) writes `\</tag>` to escape HTML close
+// tags inside the model's own text — likely so the model's HTML-looking
+// content doesn't get interpreted as structural HTML by downstream
+// consumers. The exporter faithfully passes the raw bytes through, which
+// is correct (preserving the archive), but the resulting .md file has
+// `\</details>` floating in the prose, which looks broken to humans
+// reading the raw .md text.
+//
+// This function returns true when the input contains the pattern, so the
+// Markdown exporter can wrap such content in a fenced code block to make
+// the boundary between raw model content and exporter-generated HTML
+// structure visually unambiguous.
+function _hasBackslashEscapedHtml(text) {
+  if (typeof text !== "string" || text === "") return false;
+  return /\\<\/[a-zA-Z]/.test(text);
+}
+
+// Wrap raw model content (body or reasoning) for display inside the
+// Markdown export. When the content contains backslash-escaped HTML
+// close tags (the bug pattern), wrap it in a fenced code block so the
+// raw bytes are clearly "code/raw model content", not confused with the
+// exporter's structural HTML (`<details>`, `</details>`).
+//
+// Plain HTML tags (e.g. the model wrote `<b>bold</b>` for emphasis)
+// are NOT wrapped — that's the model's intentional formatting and
+// Markdown renderers handle it correctly. Plain text reasoning is also
+// not wrapped, preserving its current Markdown rendering.
+//
+// Returns the content suitable for direct concatenation into the Markdown
+// output (with a trailing newline). Caller adds the surrounding `\n\n`.
+function _wrapRawContentForMarkdown(text) {
+  if (!text) return "";
+  if (_hasBackslashEscapedHtml(text)) {
+    return "```\n" + text + "\n```";
+  }
+  return text;
+}
+
 // --- Exporters ---------------------------------------------------------------
 
 // JSON preserves all data: messages, reasoning, metadata, token usage.
@@ -272,12 +317,13 @@ function toMarkdown(conversations) {
       }
 
       var body = extractMessageBody(msg);
-      output += (body !== '' ? body : _emptyPlaceholder(msg)) + '\n\n';
+      var bodyText = (body !== '' ? body : _emptyPlaceholder(msg));
+      output += _wrapRawContentForMarkdown(bodyText) + '\n\n';
 
       var reasoning = extractReasoning(msg);
       if (reasoning) {
         output += '<details>\n<summary>Reasoning</summary>\n\n';
-        output += reasoning + '\n\n';
+        output += _wrapRawContentForMarkdown(reasoning) + '\n\n';
         output += '</details>\n\n';
       }
 
@@ -338,7 +384,8 @@ function toPlainText(conversations) {
       var indexLabel2 = ' [#' + origIdx2 + ']';
       output += roleLabel2 + timestamp2 + indexLabel2 + ':\n';
       var body2 = extractMessageBody(msg2);
-      output += (body2 !== '' ? body2 : _emptyPlaceholder(msg2)) + '\n\n';
+      var body2Text = (body2 !== '' ? body2 : _emptyPlaceholder(msg2));
+      output += _wrapRawContentForMarkdown(body2Text) + '\n\n';
     }
 
     output += '\n\n';
@@ -403,6 +450,8 @@ module.exports = {
   toPlainText: toPlainText,
   extractMessageBody: extractMessageBody,
   extractReasoning: extractReasoning,
+  _wrapRawContentForMarkdown: _wrapRawContentForMarkdown,
+  _hasBackslashEscapedHtml: _hasBackslashEscapedHtml,
   EXPORTERS: EXPORTERS,
   downloadExport: downloadExport
 };

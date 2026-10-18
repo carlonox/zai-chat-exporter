@@ -274,6 +274,132 @@
     overflow-y: auto;
   }
 
+  /* Tool calls block — structured rendering for type:"tool_calls" blocks.
+     Shows tool name, call ID, parsed arguments, status, and result. */
+  .tool-calls-block {
+    border-left: 3px solid #0066cc;
+    background: #f0f7ff;
+    padding: 6px 10px;
+    margin: 6px 0;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  .tool-calls-block .tc-header {
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 4px;
+    font-family: monospace;
+  }
+  .tool-calls-block .tc-call {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 6px 10px;
+    margin: 6px 0;
+  }
+  .tool-calls-block .tc-call-name {
+    font-weight: 700;
+    color: #0066cc;
+    font-family: monospace;
+    font-size: 13px;
+  }
+  .tool-calls-block .tc-call-id {
+    font-family: monospace;
+    font-size: 10px;
+    color: var(--muted);
+    word-break: break-all;
+    margin-top: 2px;
+  }
+  .tool-calls-block .tc-section {
+    margin-top: 6px;
+  }
+  .tool-calls-block .tc-section-label {
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 2px;
+  }
+  .tool-calls-block .tc-arg-row {
+    margin: 3px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .tool-calls-block .tc-arg-key {
+    font-family: monospace;
+    font-size: 11px;
+    color: #0066cc;
+    font-weight: 600;
+  }
+  .tool-calls-block .tc-arg-value {
+    font-family: "SF Mono", Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 11px;
+    background: #f0f0f5;
+    padding: 4px 6px;
+    border-radius: 3px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+  }
+  .tool-calls-block .tc-arg-raw {
+    font-style: italic;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .tool-calls-block .tc-status {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-family: monospace;
+  }
+  .tool-calls-block .tc-status-completed { background: #c8e6c8; color: #1e5a1e; }
+  .tool-calls-block .tc-status-error { background: #ffd0d0; color: #800000; }
+  .tool-calls-block .tc-status-unknown { background: #ffe0a0; color: #804000; }
+  .tool-calls-block .tc-result {
+    background: #f8f8f8;
+    border-left: 2px solid var(--muted);
+    padding: 4px 8px;
+    margin-top: 4px;
+    font-family: "SF Mono", Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  .tool-calls-block .tc-no-result {
+    font-style: italic;
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .tool-calls-block .tc-time {
+    font-family: monospace;
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .tool-calls-block .tc-unmatched {
+    background: #fff0f0;
+    border: 1px solid #f0a0a0;
+    padding: 4px 8px;
+    margin-top: 4px;
+    font-size: 11px;
+  }
+  .tool-calls-block .tc-unmatched-header {
+    font-weight: 600;
+    color: #800000;
+    margin-bottom: 4px;
+  }
+
   .message-raw {
     border-top: 1px solid var(--border);
     padding: 8px 12px;
@@ -573,6 +699,333 @@ function extractReasoning(msg) {
     if (parts.length) return parts.join("\n\n");
   }
   return "";
+}
+
+// --- Tool calls parsing & rendering ---------------------------------------
+//
+// Handles `content_blocks` of `type: "tool_calls"`. These blocks have a
+// structured shape that the generic text-extraction logic can't reach:
+//
+//   {
+//     "type": "tool_calls",
+//     "content": [
+//       {
+//         "id": "...",
+//         "type": "function",
+//         "function": { "name": "Bash", "arguments": "..." }
+//       }
+//     ],
+//     "started_at": <number>,
+//     "ended_at":   <number>,
+//     "results":    [
+//       { "tool_call_id": "...", "content": "...", "status": "..." }
+//     ]
+//   }
+//
+// The renderer produces a structured DOM (no innerHTML anywhere on
+// untrusted text — everything goes through document.createElement +
+// textContent) so any HTML or script tags inside the tool call payload
+// are displayed as text, never executed.
+
+// Defensively parse `function.arguments`. It may be:
+//   - a JSON string     → parse and pretty-format
+//   - an object already → pretty-format
+//   - a non-JSON string → display raw
+//   - missing/undefined → display "(none)"
+// Returns { parsed: <object|null>, raw: <string>, isJson: <bool> }.
+function _parseToolCallArguments(args) {
+  if (args === undefined || args === null) {
+    return { parsed: null, raw: "(none)", isJson: false };
+  }
+  if (typeof args === "object") {
+    // Already an object/array — pretty-format as JSON.
+    try {
+      return { parsed: args, raw: JSON.stringify(args, null, 2), isJson: true };
+    } catch (e) {
+      return { parsed: null, raw: String(args), isJson: false };
+    }
+  }
+  if (typeof args === "string") {
+    var trimmed = args.trim();
+    if (trimmed === "") return { parsed: null, raw: "(empty string)", isJson: false };
+    // Try parsing as JSON.
+    try {
+      var parsed = JSON.parse(trimmed);
+      return { parsed: parsed, raw: JSON.stringify(parsed, null, 2), isJson: true };
+    } catch (e) {
+      // Not valid JSON — return raw string.
+      return { parsed: null, raw: args, isJson: false };
+    }
+  }
+  // Numbers, booleans, etc. — display as string.
+  return { parsed: null, raw: String(args), isJson: false };
+}
+
+// Match each tool call (content[].id) to its result (results[].tool_call_id).
+// Returns { matched: [{ call, result }], unmatchedResults: [<result>] }.
+function _matchToolCallsToResults(calls, results) {
+  var matched = [];
+  var unmatchedResults = [];
+  var resultsByCallId = {};
+  if (Array.isArray(results)) {
+    for (var i = 0; i < results.length; i++) {
+      var r = results[i];
+      if (!r || typeof r !== "object") continue;
+      var tcid = r.tool_call_id;
+      if (tcid === undefined || tcid === null) {
+        // Result has no tool_call_id — can't match, treat as unmatched.
+        unmatchedResults.push(r);
+        continue;
+      }
+      var key = String(tcid);
+      if (!resultsByCallId[key]) resultsByCallId[key] = [];
+      resultsByCallId[key].push(r);
+    }
+  }
+  if (Array.isArray(calls)) {
+    for (var j = 0; j < calls.length; j++) {
+      var c = calls[j];
+      if (!c || typeof c !== "object") continue;
+      var cid = c.id;
+      var key2 = cid !== undefined && cid !== null ? String(cid) : null;
+      var matchedResults = key2 ? (resultsByCallId[key2] || []) : [];
+      // Mark these results as consumed so we can find unmatched ones.
+      if (matchedResults.length > 0) {
+        // Take the first match; remaining duplicates stay available for
+        // the next call with the same ID (rare but possible).
+        matched.push({ call: c, result: matchedResults[0] });
+        matchedResults.shift();
+      } else {
+        matched.push({ call: c, result: null });
+      }
+    }
+  }
+  // Any results left in resultsByCallId that weren't consumed are unmatched.
+  for (var k in resultsByCallId) {
+    if (Object.prototype.hasOwnProperty.call(resultsByCallId, k)) {
+      var leftover = resultsByCallId[k];
+      for (var m = 0; m < leftover.length; m++) {
+        unmatchedResults.push(leftover[m]);
+      }
+    }
+  }
+  return { matched: matched, unmatchedResults: unmatchedResults };
+}
+
+// Build a structured DOM tree for one tool_calls content_block.
+// All text is inserted via textContent — never innerHTML — so any HTML
+// or script tags in the payload are displayed as text.
+function renderToolCallsBlock(block) {
+  var container = document.createElement("div");
+  container.className = "tool-calls-block";
+
+  var header = document.createElement("div");
+  header.className = "tc-header";
+  header.textContent = "Tool calls";
+  container.appendChild(header);
+
+  if (!block || typeof block !== "object") {
+    var note = document.createElement("div");
+    note.className = "tc-arg-raw";
+    note.textContent = "(malformed tool_calls block)";
+    container.appendChild(note);
+    return container;
+  }
+
+  var calls = Array.isArray(block.content) ? block.content : [];
+  var results = Array.isArray(block.results) ? block.results : [];
+  var matchResult = _matchToolCallsToResults(calls, results);
+
+  // Per-call rendering
+  for (var i = 0; i < matchResult.matched.length; i++) {
+    var pair = matchResult.matched[i];
+    var call = pair.call;
+    var result = pair.result;
+
+    var callDiv = document.createElement("div");
+    callDiv.className = "tc-call";
+
+    // Tool name (function.name)
+    var name = (call && call.function && call.function.name) || "(unknown tool)";
+    var nameSpan = document.createElement("div");
+    nameSpan.className = "tc-call-name";
+    nameSpan.textContent = "Tool: " + name;
+    callDiv.appendChild(nameSpan);
+
+    // Call ID
+    if (call && call.id !== undefined && call.id !== null) {
+      var idSpan = document.createElement("div");
+      idSpan.className = "tc-call-id";
+      idSpan.textContent = "call id: " + call.id;
+      callDiv.appendChild(idSpan);
+    }
+
+    // Arguments section
+    var argSection = document.createElement("div");
+    argSection.className = "tc-section";
+    var argLabel = document.createElement("div");
+    argLabel.className = "tc-section-label";
+    argLabel.textContent = "Arguments";
+    argSection.appendChild(argLabel);
+
+    var args = (call && call.function && call.function.arguments !== undefined)
+      ? call.function.arguments
+      : undefined;
+    var parsedArgs = _parseToolCallArguments(args);
+    if (parsedArgs.parsed !== null && typeof parsedArgs.parsed === "object" && !Array.isArray(parsedArgs.parsed)) {
+      // Object with named keys — show each key/value as a separate row.
+      var keys = Object.keys(parsedArgs.parsed);
+      for (var k = 0; k < keys.length; k++) {
+        var argKey = keys[k];
+        var argVal = parsedArgs.parsed[argKey];
+        var row = document.createElement("div");
+        row.className = "tc-arg-row";
+        var keySpan = document.createElement("div");
+        keySpan.className = "tc-arg-key";
+        keySpan.textContent = argKey + ":";
+        row.appendChild(keySpan);
+        var valSpan = document.createElement("div");
+        valSpan.className = "tc-arg-value";
+        var valText;
+        try {
+          valText = (typeof argVal === "string") ? argVal : JSON.stringify(argVal, null, 2);
+        } catch (e) {
+          valText = String(argVal);
+        }
+        valSpan.textContent = valText;
+        row.appendChild(valSpan);
+        argSection.appendChild(row);
+      }
+      if (keys.length === 0) {
+        var empty = document.createElement("div");
+        empty.className = "tc-arg-raw";
+        empty.textContent = "(empty object)";
+        argSection.appendChild(empty);
+      }
+    } else {
+      // Not a JSON object (or string that didn't parse to object) — show raw.
+      var rawSpan = document.createElement("div");
+      rawSpan.className = "tc-arg-value";
+      rawSpan.textContent = parsedArgs.raw;
+      argSection.appendChild(rawSpan);
+      if (!parsedArgs.isJson) {
+        var rawHint = document.createElement("div");
+        rawHint.className = "tc-arg-raw";
+        rawHint.textContent = "(raw string — not parseable as JSON)";
+        argSection.appendChild(rawHint);
+      }
+    }
+    callDiv.appendChild(argSection);
+
+    // Result section
+    var resultSection = document.createElement("div");
+    resultSection.className = "tc-section";
+    var resultLabel = document.createElement("div");
+    resultLabel.className = "tc-section-label";
+    resultLabel.textContent = "Result";
+    resultSection.appendChild(resultLabel);
+
+    if (result) {
+      // Status
+      if (result.status !== undefined && result.status !== null) {
+        var statusSpan = document.createElement("span");
+        var statusText = String(result.status).toLowerCase();
+        statusSpan.className = "tc-status tc-status-" +
+          (statusText === "completed" || statusText === "success" || statusText === "ok" ? "completed" :
+           statusText === "error" || statusText === "failed" || statusText === "failure" ? "error" :
+           "unknown");
+        statusSpan.textContent = "Status: " + result.status;
+        resultSection.appendChild(statusSpan);
+      } else {
+        var noStatus = document.createElement("span");
+        noStatus.className = "tc-status tc-status-unknown";
+        noStatus.textContent = "Status: (none)";
+        resultSection.appendChild(noStatus);
+      }
+      // Output content
+      if (result.content !== undefined && result.content !== null) {
+        var outDiv = document.createElement("div");
+        outDiv.className = "tc-result";
+        var outText;
+        if (typeof result.content === "string") {
+          outText = result.content;
+        } else {
+          try { outText = JSON.stringify(result.content, null, 2); }
+          catch (e) { outText = String(result.content); }
+        }
+        outDiv.textContent = outText;
+        resultSection.appendChild(outDiv);
+      }
+      // Show tool_call_id from the result (so the link is visible)
+      if (result.tool_call_id !== undefined && result.tool_call_id !== null) {
+        var tcidDiv = document.createElement("div");
+        tcidDiv.className = "tc-call-id";
+        tcidDiv.textContent = "result for call id: " + result.tool_call_id;
+        resultSection.appendChild(tcidDiv);
+      }
+    } else {
+      var noResult = document.createElement("div");
+      noResult.className = "tc-no-result";
+      noResult.textContent = "(no result found for this call — likely failed or was not executed)";
+      resultSection.appendChild(noResult);
+    }
+    callDiv.appendChild(resultSection);
+
+    container.appendChild(callDiv);
+  }
+
+  // Block-level timing
+  if (block.started_at !== undefined || block.ended_at !== undefined) {
+    var timeDiv = document.createElement("div");
+    timeDiv.className = "tc-time";
+    var timeText = "Timing: ";
+    if (block.started_at !== undefined && block.started_at !== null) {
+      timeText += "started " + block.started_at;
+    }
+    if (block.ended_at !== undefined && block.ended_at !== null) {
+      if (block.started_at !== undefined && block.started_at !== null) timeText += " → ";
+      timeText += "ended " + block.ended_at;
+      if (typeof block.started_at === "number" && typeof block.ended_at === "number") {
+        timeText += " (duration " + (block.ended_at - block.started_at) + "s)";
+      }
+    }
+    timeDiv.textContent = timeText;
+    container.appendChild(timeDiv);
+  }
+
+  // Unmatched results (results whose tool_call_id has no matching call)
+  if (matchResult.unmatchedResults.length > 0) {
+    var umDiv = document.createElement("div");
+    umDiv.className = "tc-unmatched";
+    var umHeader = document.createElement("div");
+    umHeader.className = "tc-unmatched-header";
+    umHeader.textContent = "Unmatched results (" + matchResult.unmatchedResults.length + ")";
+    umDiv.appendChild(umHeader);
+    for (var ui = 0; ui < matchResult.unmatchedResults.length; ui++) {
+      var um = matchResult.unmatchedResults[ui];
+      var umRow = document.createElement("div");
+      umRow.className = "tc-arg-row";
+      var umId = document.createElement("div");
+      umId.className = "tc-arg-key";
+      umId.textContent = "tool_call_id: " + (um.tool_call_id !== undefined ? um.tool_call_id : "(none)");
+      umRow.appendChild(umId);
+      var umContent = document.createElement("div");
+      umContent.className = "tc-arg-value";
+      var umContentText;
+      if (typeof um.content === "string") umContentText = um.content;
+      else if (um.content === undefined || um.content === null) umContentText = "(no content)";
+      else {
+        try { umContentText = JSON.stringify(um.content, null, 2); }
+        catch (e) { umContentText = String(um.content); }
+      }
+      umContent.textContent = umContentText;
+      umRow.appendChild(umContent);
+      umDiv.appendChild(umRow);
+    }
+    container.appendChild(umDiv);
+  }
+
+  return container;
 }
 
 // --- Conversation ordering (mirrors src/lib/order.js) --------------------
@@ -1071,6 +1524,14 @@ function renderMessageCard(msg, origIdx, displayIdx, branchByStart, matchSet) {
     blocks.appendChild(bSum);
     for (var bi = 0; bi < msg.content_blocks.length; bi++) {
       var block = msg.content_blocks[bi];
+      // Tool calls get a dedicated structured renderer (not the generic
+      // "(no text payload)" fallback). All other block types render as
+      // plain text via the generic path.
+      if (block && block.type === "tool_calls") {
+        var tcContainer = renderToolCallsBlock(block);
+        blocks.appendChild(tcContainer);
+        continue;
+      }
       var bd = document.createElement("div");
       bd.className = "block";
       var btSpan = document.createElement("span");

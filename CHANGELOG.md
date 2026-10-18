@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-10-18
+
+### Fixed
+- **Markdown `\</details>` artifact** (reported as "literal `\</details>` at
+  end of model output"): diagnostic tests confirmed the exporter never
+  generates a backslash before an HTML close tag from its own logic. The
+  pattern only appears in the `.md` output when the raw API content
+  (either `msg.content`, `msg.reasoning`, or a `content_blocks[].content`
+  field) already contains `\</details>` literally — likely Z.ai's
+  intentional Markdown escaping to prevent the model's HTML-looking text
+  from being interpreted as structural HTML. The exporter faithfully
+  passes the raw bytes through (which is correct — preserves the
+  archive), but the result was a `.md` file with `\</details>` floating
+  in the prose, which looked broken. Fix: when raw content contains
+  the `\</tag>` pattern, the Markdown and TXT exporters now wrap that
+  content in a fenced code block. Raw bytes are preserved verbatim
+  (no modification), but they are now visually "code/raw model
+  content", clearly distinguished from the exporter's structural
+  `<details>...</details>`. Plain text and plain HTML (`<b>bold</b>`
+  etc.) are NOT wrapped — preserving the model's intentional formatting.
+
+### Added
+- **Tool Calls dedicated renderer** in `tools/zai-json-viewer.html`:
+  `content_blocks` of `type: "tool_calls"` now render as a structured
+  card showing tool name, call ID, parsed arguments (defensively
+  handling JSON strings, plain strings, objects, and missing values),
+  status, output content, started_at / ended_at with computed duration,
+  and per-call result matching via `tool_call_id`. Unmatched results
+  (those whose `tool_call_id` has no corresponding call) are listed in
+  a separate "Unmatched results" section so nothing is silently
+  dropped. Multi-call blocks fully supported. All text rendered via
+  `textContent` so HTML/script tags inside tool call payloads are
+  displayed as text, never executed.
+- New helpers in viewer: `_parseToolCallArguments()`,
+  `_matchToolCallsToResults()`, `renderToolCallsBlock()`.
+- 18 new tests for the `\</details>` fix
+  (`tests/test_details_escape.js`) — covers the pattern detector, the
+  wrapper, regression scenarios proving the exporter doesn't add
+  backslashes from its own logic, the wrapped code-block behavior, and
+  JSON non-regression.
+- 17 new tests for the tool_calls rendering logic
+  (`tests/test_viewer_tool_calls.js`) — covers all 10 spec scenarios
+  using the spec fixture plus synthetic edge cases.
+
+### Notes
+- Root cause of `\</details>` was verified by running the exporter on
+  12 message-shape scenarios (`/home/z/my-project/scripts/diagnose_details_bug.js`).
+  Confirmed: the exporter never adds a backslash. The pattern only
+  appears in output when the raw API content has it. This is documented
+  behavior — the exporter faithfully preserves raw bytes; the fix
+  wraps such content in a code block to visually distinguish it from
+  structural HTML.
+- Real Z.ai long-conversation behavior is **still pending real-world
+  verification**; only mocked-API tests are passing. No claim of
+  end-to-end real-Z.ai verification is made.
+
 ## [1.0.3] - 2026-10-18
 
 ### Fixed
