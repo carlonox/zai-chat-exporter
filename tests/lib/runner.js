@@ -68,7 +68,10 @@ async function runAll() {
     "test_batched_fetch.js",
     "test_popup_normalization.js",
     "test_select_export.js",
-    "test_integration_scenarios.js"
+    "test_integration_scenarios.js",
+    "test_order.js",
+    "test_markdown_order.js",
+    "test_viewer_logic.js"
   ];
 
   for (var i = 0; i < testFiles.length; i++) {

@@ -119,7 +119,7 @@ function normalizeMessage(msg) {
   for (var b = 0; b < blocks.length; b++) {
     if (blocks[b] && blocks[b].type === "reasoning") { rBlock = blocks[b]; break; }
   }
-  return {
+  var normalized = {
     id: msg.id !== undefined ? msg.id : null,
     role: msg.role !== undefined ? msg.role : null,
     content: msg.content !== undefined ? msg.content : null,
@@ -130,6 +130,11 @@ function normalizeMessage(msg) {
     usage: msg.usage || null,
     done: msg.done || false
   };
+  // Preserve order-reconstruction fields so the JSON archive + Markdown
+  // exporter can reconstruct the conversation timeline later.
+  if (msg.parent_id !== undefined) normalized.parent_id = msg.parent_id;
+  if (msg.children_ids !== undefined) normalized.children_ids = msg.children_ids;
+  return normalized;
 }
 
 // Fetch + normalize one chat, with chunked batch fetching and missing-ID

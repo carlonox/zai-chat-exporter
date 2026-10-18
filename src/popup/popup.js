@@ -16,6 +16,11 @@ import { EXPORTERS, downloadExport } from "../lib/exporters.js";
 // keeps the original `content` exactly as the API returned it. The
 // Markdown/TXT exporters independently use extractMessageBody() to find the
 // body text, which falls back to content_blocks when `content` is empty.
+//
+// Order-relevant fields (parent_id, children_ids) ARE preserved if present,
+// so the JSON archive contains enough information to reconstruct the
+// conversation timeline later (the Markdown exporter uses these to reorder
+// for human readability; the JSON viewer offers an optional timeline view).
 function normalizeMessage(msg) {
   if (!msg || typeof msg !== "object") return null;
   var blocks = Array.isArray(msg.content_blocks) ? msg.content_blocks : [];
@@ -23,7 +28,7 @@ function normalizeMessage(msg) {
   for (var b = 0; b < blocks.length; b++) {
     if (blocks[b] && blocks[b].type === "reasoning") { rBlock = blocks[b]; break; }
   }
-  return {
+  var normalized = {
     id: msg.id !== undefined ? msg.id : null,
     role: msg.role !== undefined ? msg.role : null,
     content: msg.content !== undefined ? msg.content : null,
@@ -34,6 +39,12 @@ function normalizeMessage(msg) {
     usage: msg.usage || null,
     done: msg.done || false
   };
+  // Preserve order-reconstruction fields when present. These are the
+  // signals the Markdown exporter / JSON viewer use to lay out the
+  // conversation in human-readable order.
+  if (msg.parent_id !== undefined) normalized.parent_id = msg.parent_id;
+  if (msg.children_ids !== undefined) normalized.children_ids = msg.children_ids;
+  return normalized;
 }
 
 // Rebuild the messages array in the ORIGINAL ID order from

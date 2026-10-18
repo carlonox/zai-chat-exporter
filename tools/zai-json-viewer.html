@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Z.ai JSON Viewer (local)</title>
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --card-bg: #ffffff;
+    --border: #d8d8dd;
+    --text: #1c1c1e;
+    --muted: #6c6c70;
+    --accent: #0066cc;
+    --user-bg: #e8f4ff;
+    --user-border: #9cc7f0;
+    --assistant-bg: #f3f3f5;
+    --assistant-border: #d8d8dd;
+    --other-bg: #fff7e0;
+    --other-border: #f0d878;
+    --missing-bg: #fff0f0;
+    --missing-border: #f0a0a0;
+    --reasoning-bg: #fafaff;
+    --reasoning-border: #c0c0e0;
+    --code-bg: #f0f0f5;
+    --error-bg: #ffe0e0;
+    --error-text: #b00020;
+    --success-text: #0a7d28;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    background: var(--card-bg);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { margin: 0 0 8px 0; font-size: 18px; }
+  header .file-controls {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  header .file-controls #filePicker { font-size: 13px; }
+  header .file-controls #dropZone {
+    border: 2px dashed var(--border);
+    padding: 4px 12px;
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 13px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  header .file-controls #dropZone.drag-over {
+    border-color: var(--accent);
+    background: var(--user-bg);
+  }
+  header .file-name { font-size: 12px; color: var(--muted); margin-left: 8px; }
+  #status {
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  #status.error { color: var(--error-text); background: var(--error-bg); padding: 6px 10px; border-radius: 4px; }
+  #status.success { color: var(--success-text); }
+
+  main {
+    padding: 16px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  /* Conversation selector (when JSON contains multiple chats) */
+  #conversationSelector {
+    margin-bottom: 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    display: none;
+  }
+  #conversationSelector.visible { display: block; }
+  #conversationSelector label { font-weight: 600; margin-right: 8px; }
+  #conversationSelector select { font-size: 13px; max-width: 600px; }
+
+  /* Stats summary */
+  #conversationStats {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    display: none;
+  }
+  #conversationStats.visible { display: block; }
+  #conversationStats h2 { margin: 0 0 8px 0; font-size: 16px; }
+  #conversationStats .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 6px 16px;
+  }
+  #conversationStats .stat-grid div {
+    display: flex; justify-content: space-between;
+    border-bottom: 1px dotted var(--border);
+    padding: 2px 0;
+  }
+  #conversationStats .stat-grid div span:first-child { color: var(--muted); }
+  #conversationStats .stat-grid div span:last-child { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Controls */
+  #controls {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    display: none;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  #controls.visible { display: flex; }
+  #controls button, #controls select, #controls input[type="search"] {
+    font-size: 13px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--card-bg);
+    cursor: pointer;
+  }
+  #controls button:hover { background: var(--user-bg); }
+  #controls input[type="search"] { min-width: 200px; flex: 1; max-width: 400px; }
+  #controls label { font-size: 13px; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  #controls .match-info { font-size: 12px; color: var(--muted); margin-left: 4px; }
+
+  /* Diagnostics */
+  #diagnostics {
+    background: #fff8e0;
+    border: 1px solid #f0d878;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    display: none;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+  #diagnostics.visible { display: block; }
+  #diagnostics h3 { margin: 0 0 8px 0; font-size: 14px; }
+  #diagnostics ul { margin: 4px 0 8px 16px; padding: 0; }
+  #diagnostics li { margin: 2px 0; }
+  #diagnostics .move-table { font-size: 12px; font-family: monospace; max-height: 150px; overflow-y: auto; background: #fff; border: 1px solid var(--border); padding: 4px; border-radius: 3px; }
+
+  /* Message list */
+  #messageList {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .message-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--card-bg);
+    overflow: hidden;
+  }
+  .message-card.role-user { background: var(--user-bg); border-color: var(--user-border); }
+  .message-card.role-assistant { background: var(--assistant-bg); border-color: var(--assistant-border); }
+  .message-card.role-other { background: var(--other-bg); border-color: var(--other-border); }
+  .message-card.role-missing { background: var(--missing-bg); border-color: var(--missing-border); }
+  .message-card.branch { border-left: 4px solid var(--accent); }
+  .message-card.search-match { box-shadow: 0 0 0 2px #ffd700; }
+
+  .message-header {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: baseline;
+  }
+  .message-header .role {
+    font-weight: 600;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 11px;
+  }
+  .message-header .role.role-user { color: var(--accent); }
+  .message-header .order-num { font-family: monospace; font-variant-numeric: tabular-nums; }
+  .message-header .ts { font-family: monospace; }
+  .message-header .msg-id { font-family: monospace; font-size: 11px; color: var(--muted); word-break: break-all; }
+  .message-header .flags { display: flex; gap: 4px; flex-wrap: wrap; }
+  .message-header .flag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    background: #ffd0d0; color: #800000;
+  }
+  .message-header .flag.flag-missing { background: #ffd0d0; color: #800000; }
+  .message-header .flag.flag-duplicate-id { background: #ffe0a0; color: #804000; }
+  .message-header .flag.flag-missing-ts { background: #ffe0e0; color: #800000; }
+  .message-header .flag.flag-missing-parent { background: #ffe0a0; color: #804000; }
+  .message-header .flag.flag-branch { background: #d0e0ff; color: #004080; }
+
+  .message-body {
+    padding: 10px 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .message-body.collapsed { max-height: 200px; overflow-y: hidden; position: relative; }
+  .message-body.collapsed::after {
+    content: "";
+    position: absolute; bottom: 0; left: 0; right: 0; height: 40px;
+    background: linear-gradient(transparent, var(--card-bg));
+    pointer-events: none;
+  }
+
+  .message-reasoning {
+    border-top: 1px solid var(--reasoning-border);
+    background: var(--reasoning-bg);
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+  }
+  .message-reasoning summary { cursor: pointer; font-weight: 600; color: var(--text); font-style: normal; }
+  .message-reasoning .reasoning-content {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    margin-top: 6px;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .message-blocks {
+    border-top: 1px solid var(--border);
+    padding: 8px 12px;
+    font-size: 12px;
+    background: #fafafa;
+  }
+  .message-blocks summary { cursor: pointer; font-weight: 600; }
+  .message-blocks .block {
+    margin: 4px 0;
+    padding: 4px 6px;
+    border-left: 3px solid var(--border);
+    background: #fff;
+  }
+  .message-blocks .block-type {
+    display: inline-block;
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--muted);
+    margin-right: 8px;
+  }
+  .message-blocks .block-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .message-raw {
+    border-top: 1px solid var(--border);
+    padding: 8px 12px;
+    font-size: 12px;
+    background: var(--code-bg);
+  }
+  .message-raw summary { cursor: pointer; font-weight: 600; }
+  .message-raw pre {
+    margin: 6px 0 0 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: "SF Mono", Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  .message-actions {
+    padding: 4px 12px 6px 12px;
+    font-size: 11px;
+    text-align: right;
+  }
+  .message-actions button {
+    font-size: 11px;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    background: var(--card-bg);
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .message-actions button:hover { background: var(--user-bg); }
+
+  /* Full-raw-JSON modal */
+  #rawModal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 100;
+    display: none;
+    padding: 24px;
+  }
+  #rawModal.visible { display: flex; flex-direction: column; }
+  #rawModal .modal-content {
+    background: var(--card-bg);
+    border-radius: 8px;
+    flex: 1;
+    display: flex; flex-direction: column;
+    max-width: 100%; overflow: hidden;
+  }
+  #rawModal .modal-header {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  #rawModal .modal-header h3 { margin: 0; font-size: 14px; }
+  #rawModal .modal-header button {
+    font-size: 13px;
+    padding: 2px 10px;
+    cursor: pointer;
+  }
+  #rawModal pre {
+    margin: 0;
+    padding: 12px 16px;
+    overflow: auto;
+    flex: 1;
+    font-family: "SF Mono", Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+
+  /* Search highlight (we wrap matches in <mark> via textContent on a wrapper) */
+  mark { background: #ffd700; padding: 0 1px; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Z.ai JSON Viewer</h1>
+  <div class="file-controls">
+    <input type="file" id="filePicker" accept=".json,application/json,text/json">
+    <span id="dropZone">or drag &amp; drop a .json file here</span>
+    <span class="file-name" id="fileName"></span>
+  </div>
+  <div id="status"></div>
+</header>
+
+<main>
+  <div id="conversationSelector">
+    <label for="conversationSelect">Conversation:</label>
+    <select id="conversationSelect"></select>
+  </div>
+
+  <div id="conversationStats">
+    <h2 id="convTitle"></h2>
+    <div class="stat-grid" id="statGrid"></div>
+  </div>
+
+  <div id="controls">
+    <button id="firstMsg" title="Jump to first message">First</button>
+    <button id="prevMatch" title="Previous search match">Prev match</button>
+    <input type="search" id="searchBox" placeholder="Search message body...">
+    <button id="nextMatch" title="Next search match">Next match</button>
+    <button id="lastMsg" title="Jump to last message">Last</button>
+    <select id="roleFilter">
+      <option value="all">All roles</option>
+      <option value="user">User only</option>
+      <option value="assistant">Assistant only</option>
+      <option value="other">Other roles</option>
+      <option value="missing">Missing/anomaly</option>
+    </select>
+    <label><input type="checkbox" id="timelineSort"> Sort by timeline (parent/timestamp)</label>
+    <button id="toggleDiagnostics">Toggle diagnostics</button>
+    <button id="viewRaw">View full raw JSON</button>
+    <span class="match-info" id="matchInfo"></span>
+  </div>
+
+  <div id="diagnostics">
+    <h3>Ordering diagnostics</h3>
+    <div id="diagnosticsContent"></div>
+  </div>
+
+  <div id="messageList">
+    <div class="empty-state">No file loaded. Click "Choose File" or drag a JSON export here.</div>
+  </div>
+</main>
+
+<div id="rawModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Full raw JSON</h3>
+      <button id="closeRawModal">Close</button>
+    </div>
+    <pre id="rawModalPre"></pre>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ============================================================================
+// Z.ai JSON Viewer — fully local, no network, no external dependencies.
+//
+// Privacy contract:
+//   - The file you load is parsed in-memory by the browser's own
+//     JSON.parse. Nothing is uploaded anywhere.
+//   - No <script src>, no fetch(), no XHR, no Web Workers pointing at
+//     remote URLs, no analytics.
+//   - All message body text is rendered via textContent / DOM text nodes
+//     so any HTML or <script> tags inside the JSON are displayed as text,
+//     never executed.
+// ============================================================================
+
+// --- State -----------------------------------------------------------------
+
+var STATE = {
+  rawJson: null,         // parsed JSON (single chat OR array of chats)
+  chats: [],             // normalized array of chat objects
+  currentChatIndex: 0,
+  searchQuery: "",
+  searchMatches: [],     // array of original-array indices that match
+  searchCursor: -1,
+  roleFilter: "all",
+  timelineSort: false,
+  diagnosticsVisible: false
+};
+
+// --- Helpers (no globals leaked) -------------------------------------------
+
+// Safely convert any value to text. Used everywhere we'd otherwise be
+// tempted to write element.innerHTML = somethingFromTheJson.
+function safeText(el, text) {
+  if (text === null || text === undefined) {
+    el.textContent = "";
+    return;
+  }
+  if (typeof text === "string") {
+    el.textContent = text;
+    return;
+  }
+  // For objects/arrays, stringify for display.
+  try { el.textContent = JSON.stringify(text, null, 2); }
+  catch (e) { el.textContent = String(text); }
+}
+
+function escapeAttr(s) {
+  // For attribute values — only used for data-* attributes which are inert.
+  if (s === null || s === undefined) return "";
+  return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function isMissingMessage(msg) {
+  return !!(msg && msg._export_status === "missing");
+}
+
+function roleClass(role) {
+  if (!role) return "role-missing";
+  if (role === "user") return "role-user";
+  if (role === "assistant") return "role-assistant";
+  return "role-other";
+}
+function roleLabel(role) {
+  if (!role) return "MISSING";
+  if (role === "user") return "User";
+  if (role === "assistant") return "Assistant";
+  return String(role);
+}
+
+// --- Body extraction (mirrors src/lib/exporters.js) -----------------------
+
+var NON_ANSWER_BLOCK_TYPES = {
+  "reasoning": true, "thinking": true, "thought": true, "reflection": true, "plan": true,
+  "tool_use": true, "tool_result": true, "tool_call": true, "function_call": true, "function": true,
+  "image": true, "image_url": true, "file": true, "audio": true, "video": true,
+  "system": true, "error": true, "metadata": true
+};
+
+function _readBlockText(block) {
+  if (!block || typeof block !== "object") return "";
+  var v = (block.content !== undefined) ? block.content
+        : (block.text !== undefined) ? block.text
+        : (block.value !== undefined) ? block.value
+        : (block.data !== undefined) ? block.data : "";
+  if (typeof v === "string") return v;
+  if (Array.isArray(v)) {
+    return v.map(function(p) {
+      if (typeof p === "string") return p;
+      if (p && typeof p === "object") return _readBlockText(p);
+      return "";
+    }).join("\n");
+  }
+  if (v && typeof v === "object") {
+    if (typeof v.text === "string") return v.text;
+    if (typeof v.content === "string") return v.content;
+  }
+  return "";
+}
+
+function _isAnswerLike(type) {
+  if (type === undefined || type === null) return true;
+  return !NON_ANSWER_BLOCK_TYPES[String(type).toLowerCase()];
+}
+
+function extractMessageBody(msg) {
+  if (!msg || typeof msg !== "object") return "";
+  if (typeof msg.content === "string" && msg.content.trim() !== "") return msg.content;
+  if (Array.isArray(msg.content)) {
+    var parts = [];
+    for (var i = 0; i < msg.content.length; i++) {
+      var part = msg.content[i];
+      if (typeof part === "string" && part.trim() !== "") parts.push(part);
+      else if (part && typeof part === "object") {
+        if (!_isAnswerLike(part.type)) continue;
+        var t = _readBlockText(part);
+        if (t) parts.push(t);
+      }
+    }
+    if (parts.length) return parts.join("\n\n");
+  }
+  if (Array.isArray(msg.content_blocks)) {
+    var texts = [];
+    for (var j = 0; j < msg.content_blocks.length; j++) {
+      var b = msg.content_blocks[j];
+      if (!b || typeof b !== "object") continue;
+      if (!_isAnswerLike(b.type)) continue;
+      var txt = _readBlockText(b);
+      if (txt) texts.push(txt);
+    }
+    if (texts.length) return texts.join("\n\n");
+  }
+  return "";
+}
+
+function extractReasoning(msg) {
+  if (!msg || typeof msg !== "object") return "";
+  if (typeof msg.reasoning === "string" && msg.reasoning.trim() !== "") return msg.reasoning;
+  if (Array.isArray(msg.content_blocks)) {
+    var parts = [];
+    for (var i = 0; i < msg.content_blocks.length; i++) {
+      var b = msg.content_blocks[i];
+      if (!b || typeof b !== "object") continue;
+      var bt = b.type;
+      if (bt === "reasoning" || bt === "thinking" || bt === "thought") {
+        var txt = _readBlockText(b);
+        if (txt) parts.push(txt);
+      }
+    }
+    if (parts.length) return parts.join("\n\n");
+  }
+  return "";
+}
+
+// --- Conversation ordering (mirrors src/lib/order.js) --------------------
+// Kept in sync with the extension's lib so the viewer's optional timeline
+// sort view produces the same order the Markdown exporter does.
+
+function _normalizeTimestamp(ts) {
+  if (ts === undefined || ts === null || ts === "") return null;
+  if (typeof ts === "number") {
+    if (ts < 1e11) return ts * 1000;
+    return ts;
+  }
+  if (typeof ts === "string") {
+    var t = ts.trim();
+    if (t === "") return null;
+    var d = new Date(t);
+    if (!isNaN(d.getTime())) return d.getTime();
+    var n = Number(t);
+    if (!isNaN(n) && isFinite(n)) return n < 1e11 ? n * 1000 : n;
+    return null;
+  }
+  return null;
+}
+
+function buildConversationOrder(messages) {
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return {
+      ordered: [], strategy: "empty", branches: [],
+      missingParents: [], missingTimestamps: 0, duplicateTimestamps: [],
+      duplicateIds: [], indexMovementIfSortedByTimestamp: []
+    };
+  }
+  var n = messages.length;
+  var idToIndex = {}, idSet = {}, duplicateIds = [];
+  var hasParent = false, hasChildren = false;
+  for (var i = 0; i < n; i++) {
+    var m = messages[i];
+    if (!m) continue;
+    if (m.parent_id !== undefined && m.parent_id !== null) hasParent = true;
+    if (m.children_ids !== undefined && m.children_ids !== null) hasChildren = true;
+    if (m.id !== undefined && m.id !== null) {
+      var idStr = String(m.id);
+      if (idSet[idStr]) duplicateIds.push(idStr);
+      else { idSet[idStr] = true; idToIndex[idStr] = i; }
+    }
+  }
+  if (hasParent || hasChildren) {
+    return _orderViaParentChildren(messages, idToIndex, idSet, duplicateIds);
+  }
+  return _orderByTimestamp(messages, duplicateIds);
+}
+
+function _orderViaParentChildren(messages, idToIndex, idSet, duplicateIds) {
+  var n = messages.length;
+  var childrenOf = {}, roots = [], missingParents = [];
+  for (var j = 0; j < n; j++) {
+    var m = messages[j];
+    if (!m) continue;
+    if (m.id !== undefined && m.id !== null) {
+      var mid = String(m.id);
+      if (idToIndex[mid] !== j) continue;
+    }
+    var pid = m.parent_id;
+    if (pid === undefined || pid === null || pid === "") {
+      roots.push(j);
+    } else {
+      var pidStr = String(pid);
+      if (idSet[pidStr]) {
+        if (!childrenOf[pidStr]) childrenOf[pidStr] = [];
+        childrenOf[pidStr].push(j);
+      } else {
+        missingParents.push(j);
+        roots.push(j);
+      }
+    }
+  }
+  function tsThenIdx(a, b) {
+    var ta = _normalizeTimestamp(messages[a] && messages[a].timestamp);
+    var tb = _normalizeTimestamp(messages[b] && messages[b].timestamp);
+    if (ta === null && tb === null) return a - b;
+    if (ta === null) return 1;
+    if (tb === null) return -1;
+    if (ta === tb) return a - b;
+    return ta - tb;
+  }
+  for (var k in childrenOf) {
+    if (Object.prototype.hasOwnProperty.call(childrenOf, k)) childrenOf[k].sort(tsThenIdx);
+  }
+  roots.sort(tsThenIdx);
+
+  var visited = {}, ordered = [], branches = [];
+  function visit(start) {
+    var stack = [start];
+    while (stack.length) {
+      var idx = stack.pop();
+      if (visited[idx]) continue;
+      visited[idx] = true;
+      ordered.push(idx);
+      var cur = messages[idx];
+      if (!cur) continue;
+      var curId = (cur.id !== undefined && cur.id !== null) ? String(cur.id) : null;
+      if (!curId) continue;
+      var kids = childrenOf[curId] || [];
+      if (kids.length === 0) continue;
+      for (var b = kids.length - 1; b >= 1; b--) {
+        branches.push({ branchIndex: kids[b], parentIndex: idx, parentId: curId });
+      }
+      stack.push(kids[0]);
+    }
+  }
+  for (var r = 0; r < roots.length; r++) visit(roots[r]);
+  var parentPos = {};
+  for (var p = 0; p < ordered.length; p++) parentPos[ordered[p]] = p;
+  branches.sort(function(a, b) {
+    var pa = parentPos[a.parentIndex] !== undefined ? parentPos[a.parentIndex] : Infinity;
+    var pb = parentPos[b.parentIndex] !== undefined ? parentPos[b.parentIndex] : Infinity;
+    return pa === pb ? a.branchIndex - b.branchIndex : pa - pb;
+  });
+  for (var bi = 0; bi < branches.length; bi++) visit(branches[bi].branchIndex);
+  for (var di = 0; di < n; di++) {
+    if (!visited[di] && messages[di]) { ordered.push(di); visited[di] = true; }
+  }
+  return {
+    ordered: ordered, strategy: "parent-children",
+    branches: branches, missingParents: missingParents,
+    duplicateIds: duplicateIds, missingTimestamps: 0, duplicateTimestamps: []
+  };
+}
+
+function _orderByTimestamp(messages, duplicateIds) {
+  var n = messages.length;
+  var missing = 0, tsGroups = {}, dupTs = [];
+  for (var i = 0; i < n; i++) {
+    var m = messages[i];
+    if (!m) continue;
+    var ts = _normalizeTimestamp(m && m.timestamp);
+    if (ts === null) missing++;
+    else {
+      var key = String(ts);
+      if (!tsGroups[key]) tsGroups[key] = [];
+      tsGroups[key].push(i);
+    }
+  }
+  for (var t in tsGroups) {
+    if (Object.prototype.hasOwnProperty.call(tsGroups, t) && tsGroups[t].length > 1) dupTs.push(t);
+  }
+  var indices = [];
+  for (var j = 0; j < n; j++) indices.push(j);
+  indices.sort(function(a, b) {
+    var ta = _normalizeTimestamp(messages[a] && messages[a].timestamp);
+    var tb = _normalizeTimestamp(messages[b] && messages[b].timestamp);
+    if (ta === null && tb === null) return a - b;
+    if (ta === null) return 1;
+    if (tb === null) return -1;
+    if (ta === tb) return a - b;
+    return ta - tb;
+  });
+  return {
+    ordered: indices, strategy: missing === n ? "original" : "timestamp",
+    branches: [], missingParents: [],
+    duplicateIds: duplicateIds, missingTimestamps: missing, duplicateTimestamps: dupTs
+  };
+}
+
+// Compute "what would change" diagnostic.
+function computeMovement(ordered) {
+  var movement = [];
+  for (var i = 0; i < ordered.length; i++) {
+    if (ordered[i] !== i) {
+      movement.push({ originalIndex: ordered[i], sortedIndex: i, delta: i - ordered[i] });
+    }
+  }
+  return movement;
+}
+
+// --- File loading ---------------------------------------------------------
+
+function setStatus(text, type) {
+  var el = document.getElementById("status");
+  el.textContent = text;
+  el.className = type ? type : "";
+}
+
+function loadFile(file) {
+  if (!file) return;
+  document.getElementById("fileName").textContent = file.name + " (" + (file.size / 1024).toFixed(1) + " KiB)";
+  setStatus("Reading file...", "");
+  var reader = new FileReader();
+  reader.onload = function() {
+    try {
+      var parsed = JSON.parse(reader.result);
+      onJsonLoaded(parsed, file.name);
+    } catch (err) {
+      setStatus("JSON parse error: " + err.message, "error");
+      // Clear any stale UI.
+      document.getElementById("conversationSelector").classList.remove("visible");
+      document.getElementById("conversationStats").classList.remove("visible");
+      document.getElementById("controls").classList.remove("visible");
+      document.getElementById("diagnostics").classList.remove("visible");
+      document.getElementById("messageList").innerHTML = "";
+      var empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = "File could not be parsed. See the error above.";
+      document.getElementById("messageList").appendChild(empty);
+    }
+  };
+  reader.onerror = function() {
+    setStatus("Failed to read file: " + reader.error, "error");
+  };
+  reader.readAsText(file);
+}
+
+function onJsonLoaded(parsed, fileName) {
+  STATE.rawJson = parsed;
+  // Normalize to array of chats. Accept either a single chat object or
+  // an array of chats. A chat object is anything with a `messages` array.
+  var chats = [];
+  if (Array.isArray(parsed)) {
+    for (var i = 0; i < parsed.length; i++) {
+      if (parsed[i] && Array.isArray(parsed[i].messages)) chats.push(parsed[i]);
+    }
+  } else if (parsed && Array.isArray(parsed.messages)) {
+    chats.push(parsed);
+  } else {
+    setStatus("JSON does not look like a Z.ai export: no 'messages' array found at top level. Loaded " + fileName + " but cannot display it.", "error");
+    return;
+  }
+  STATE.chats = chats;
+  STATE.currentChatIndex = 0;
+
+  // Show conversation selector if more than one chat.
+  var sel = document.getElementById("conversationSelector");
+  var selEl = document.getElementById("conversationSelect");
+  selEl.innerHTML = "";
+  if (chats.length > 1) {
+    sel.classList.add("visible");
+    for (var c = 0; c < chats.length; c++) {
+      var opt = document.createElement("option");
+      opt.value = String(c);
+      opt.textContent = (chats[c].title || "Untitled") + " (" + (chats[c].id || "no-id") + ") — " + (chats[c].messages ? chats[c].messages.length : 0) + " msgs";
+      selEl.appendChild(opt);
+    }
+  } else {
+    sel.classList.remove("visible");
+  }
+
+  setStatus("Loaded " + fileName + " — " + chats.length + " conversation" + (chats.length === 1 ? "" : "s") + ".", "success");
+  renderCurrentChat();
+}
+
+// --- Rendering -----------------------------------------------------------
+
+function getCurrentChat() {
+  return STATE.chats[STATE.currentChatIndex] || null;
+}
+
+function renderCurrentChat() {
+  var chat = getCurrentChat();
+  if (!chat) return;
+
+  // --- Stats panel ---
+  var stats = document.getElementById("conversationStats");
+  stats.classList.add("visible");
+  document.getElementById("convTitle").textContent = chat.title || "Untitled chat";
+  var msgs = Array.isArray(chat.messages) ? chat.messages : [];
+  var counts = { user: 0, assistant: 0, other: 0, missing: 0 };
+  var duplicateIdSet = {}, duplicateIdCount = 0;
+  var missingTsCount = 0;
+  for (var i = 0; i < msgs.length; i++) {
+    var m = msgs[i];
+    if (!m) continue;
+    if (isMissingMessage(m)) { counts.missing++; continue; }
+    if (m.role === "user") counts.user++;
+    else if (m.role === "assistant") counts.assistant++;
+    else counts.other++;
+    if (m.id !== undefined && m.id !== null) {
+      var idStr = String(m.id);
+      if (duplicateIdSet[idStr]) duplicateIdCount++;
+      else duplicateIdSet[idStr] = true;
+    }
+    if (_normalizeTimestamp(m.timestamp) === null) missingTsCount++;
+  }
+  var grid = document.getElementById("statGrid");
+  grid.innerHTML = "";
+  function addStat(label, value) {
+    var div = document.createElement("div");
+    var s1 = document.createElement("span"); s1.textContent = label;
+    var s2 = document.createElement("span"); s2.textContent = String(value);
+    div.appendChild(s1); div.appendChild(s2);
+    grid.appendChild(div);
+  }
+  addStat("Conversation ID", chat.id || "(none)");
+  addStat("Total messages", msgs.length);
+  addStat("User messages", counts.user);
+  addStat("Assistant messages", counts.assistant);
+  addStat("Other role messages", counts.other);
+  addStat("Missing/anomaly messages", counts.missing);
+  addStat("Duplicate IDs", duplicateIdCount);
+  addStat("Missing/invalid timestamps", missingTsCount);
+
+  // Show controls.
+  document.getElementById("controls").classList.add("visible");
+
+  // --- Build display order ---
+  // Default: ORIGINAL array order. Timeline sort is OPT-IN.
+  var displayOrder;
+  var orderResult;
+  if (STATE.timelineSort) {
+    orderResult = buildConversationOrder(msgs);
+    displayOrder = orderResult.ordered;
+  } else {
+    displayOrder = [];
+    for (var k = 0; k < msgs.length; k++) displayOrder.push(k);
+    orderResult = buildConversationOrder(msgs);  // still computed for diagnostics
+  }
+
+  // Branch-by-start map (only meaningful when timeline sort is on)
+  var branchByStart = {};
+  if (orderResult && orderResult.branches) {
+    for (var bi = 0; bi < orderResult.branches.length; bi++) {
+      branchByStart[orderResult.branches[bi].branchIndex] = orderResult.branches[bi];
+    }
+  }
+
+  // --- Render diagnostics panel ---
+  renderDiagnostics(orderResult, msgs);
+
+  // --- Render messages ---
+  var list = document.getElementById("messageList");
+  list.innerHTML = "";
+
+  var matchSet = {};
+  for (var mi = 0; mi < STATE.searchMatches.length; mi++) matchSet[STATE.searchMatches[mi]] = true;
+
+  var visibleCount = 0;
+  for (var m = 0; m < displayOrder.length; m++) {
+    var origIdx = displayOrder[m];
+    var msg = msgs[origIdx];
+    if (!msg) continue;
+
+    // Role filter
+    var role = msg.role;
+    if (STATE.roleFilter !== "all") {
+      if (STATE.roleFilter === "user" && role !== "user") continue;
+      if (STATE.roleFilter === "assistant" && role !== "assistant") continue;
+      if (STATE.roleFilter === "other" && (role === "user" || role === "assistant" || !role)) continue;
+      if (STATE.roleFilter === "missing" && !isMissingMessage(msg)) continue;
+    }
+
+    var card = renderMessageCard(msg, origIdx, m, branchByStart, matchSet);
+    list.appendChild(card);
+    visibleCount++;
+  }
+
+  if (visibleCount === 0) {
+    var e = document.createElement("div");
+    e.className = "empty-state";
+    e.textContent = "No messages match the current filter.";
+    list.appendChild(e);
+  }
+
+  // Update search match info
+  var info = document.getElementById("matchInfo");
+  if (STATE.searchQuery) {
+    info.textContent = STATE.searchMatches.length + " match(es)";
+    if (STATE.searchCursor >= 0) {
+      info.textContent += " — viewing " + (STATE.searchCursor + 1) + "/" + STATE.searchMatches.length;
+    }
+  } else {
+    info.textContent = "";
+  }
+}
+
+function renderMessageCard(msg, origIdx, displayIdx, branchByStart, matchSet) {
+  var card = document.createElement("div");
+  var role = msg.role;
+  var cls = "message-card " + (role ? "role-" + role : "role-missing");
+  if (isMissingMessage(msg)) {
+    cls = "message-card role-missing";
+  } else if (role !== "user" && role !== "assistant") {
+    cls = "message-card role-other";
+  }
+  if (branchByStart[origIdx] && STATE.timelineSort) cls += " branch";
+  if (matchSet[origIdx] && STATE.searchQuery) cls += " search-match";
+  card.className = cls;
+
+  // Header
+  var header = document.createElement("div");
+  header.className = "message-header";
+
+  var roleSpan = document.createElement("span");
+  roleSpan.className = "role " + roleClass(role);
+  roleSpan.textContent = roleLabel(role);
+  header.appendChild(roleSpan);
+
+  var orderSpan = document.createElement("span");
+  orderSpan.className = "order-num";
+  orderSpan.textContent = "#orig:" + origIdx + " · #view:" + displayIdx;
+  header.appendChild(orderSpan);
+
+  if (msg.timestamp) {
+    var tsSpan = document.createElement("span");
+    tsSpan.className = "ts";
+    tsSpan.textContent = "ts: " + msg.timestamp;
+    header.appendChild(tsSpan);
+  } else {
+    var tsMiss = document.createElement("span");
+    tsMiss.className = "ts";
+    tsMiss.textContent = "ts: (none)";
+    header.appendChild(tsMiss);
+  }
+
+  if (msg.id !== undefined && msg.id !== null) {
+    var idSpan = document.createElement("span");
+    idSpan.className = "msg-id";
+    idSpan.textContent = "id: " + msg.id;
+    header.appendChild(idSpan);
+  }
+
+  // Flags
+  var flags = document.createElement("span");
+  flags.className = "flags";
+  if (isMissingMessage(msg)) {
+    var f1 = document.createElement("span");
+    f1.className = "flag flag-missing";
+    f1.textContent = "missing";
+    flags.appendChild(f1);
+  }
+  if (msg._duplicate_id) {
+    var f2 = document.createElement("span");
+    f2.className = "flag flag-duplicate-id";
+    f2.textContent = "duplicate id";
+    flags.appendChild(f2);
+  }
+  if (_normalizeTimestamp(msg.timestamp) === null && !isMissingMessage(msg)) {
+    var f3 = document.createElement("span");
+    f3.className = "flag flag-missing-ts";
+    f3.textContent = "missing ts";
+    flags.appendChild(f3);
+  }
+  if (msg.parent_id !== undefined && msg.parent_id !== null && !msg._parent_found) {
+    var f4 = document.createElement("span");
+    f4.className = "flag flag-missing-parent";
+    f4.textContent = "parent not in set";
+    flags.appendChild(f4);
+  }
+  if (branchByStart[origIdx] && STATE.timelineSort) {
+    var f5 = document.createElement("span");
+    f5.className = "flag flag-branch";
+    f5.textContent = "branch from " + branchByStart[origIdx].parentId;
+    flags.appendChild(f5);
+  }
+  if (flags.childNodes.length > 0) header.appendChild(flags);
+  card.appendChild(header);
+
+  // Body
+  var body = document.createElement("div");
+  body.className = "message-body";
+  if (isMissingMessage(msg)) {
+    body.textContent = "[MISSING MESSAGE — exporter could not fetch this from the API]";
+  } else {
+    var bodyText = extractMessageBody(msg);
+    if (bodyText === "") {
+      body.textContent = "[Empty message — no body recoverable from content or content_blocks]";
+    } else {
+      body.textContent = bodyText;
+    }
+  }
+  // Long content: collapse by default, with a click-to-expand toggle.
+  if (body.textContent.length > 1000) {
+    body.classList.add("collapsed");
+  }
+  card.appendChild(body);
+
+  // Reasoning
+  var reasoningText = extractReasoning(msg);
+  if (reasoningText) {
+    var r = document.createElement("details");
+    r.className = "message-reasoning";
+    var rSum = document.createElement("summary");
+    rSum.textContent = "Reasoning (separate from final answer)";
+    r.appendChild(rSum);
+    var rCt = document.createElement("div");
+    rCt.className = "reasoning-content";
+    rCt.textContent = reasoningText;
+    r.appendChild(rCt);
+    card.appendChild(r);
+  }
+
+  // content_blocks (raw view, but rendered as text)
+  if (Array.isArray(msg.content_blocks) && msg.content_blocks.length > 0) {
+    var blocks = document.createElement("details");
+    blocks.className = "message-blocks";
+    var bSum = document.createElement("summary");
+    bSum.textContent = "content_blocks (" + msg.content_blocks.length + " block" + (msg.content_blocks.length === 1 ? "" : "s") + ")";
+    blocks.appendChild(bSum);
+    for (var bi = 0; bi < msg.content_blocks.length; bi++) {
+      var block = msg.content_blocks[bi];
+      var bd = document.createElement("div");
+      bd.className = "block";
+      var btSpan = document.createElement("span");
+      btSpan.className = "block-type";
+      btSpan.textContent = "[" + (block && block.type !== undefined ? String(block.type) : "no-type") + "]";
+      bd.appendChild(btSpan);
+      var bt2 = document.createElement("div");
+      bt2.className = "block-text";
+      var btext = _readBlockText(block);
+      bt2.textContent = btext || "(no text payload)";
+      bd.appendChild(bt2);
+      blocks.appendChild(bd);
+    }
+    card.appendChild(blocks);
+  }
+
+  // Raw JSON of this single message (text-only, never executed)
+  var raw = document.createElement("details");
+  raw.className = "message-raw";
+  var rawSum = document.createElement("summary");
+  rawSum.textContent = "Raw JSON of this message";
+  raw.appendChild(rawSum);
+  var rawPre = document.createElement("pre");
+  try { rawPre.textContent = JSON.stringify(msg, null, 2); }
+  catch (e) { rawPre.textContent = "(could not stringify: " + e.message + ")"; }
+  raw.appendChild(rawPre);
+  card.appendChild(raw);
+
+  // Expand/collapse body toggle
+  var actions = document.createElement("div");
+  actions.className = "message-actions";
+  var expandBtn = document.createElement("button");
+  expandBtn.textContent = body.classList.contains("collapsed") ? "Expand" : "Collapse";
+  expandBtn.addEventListener("click", function() {
+    body.classList.toggle("collapsed");
+    expandBtn.textContent = body.classList.contains("collapsed") ? "Expand" : "Collapse";
+  });
+  actions.appendChild(expandBtn);
+  card.appendChild(actions);
+
+  return card;
+}
+
+function renderDiagnostics(orderResult, msgs) {
+  var diag = document.getElementById("diagnostics");
+  var content = document.getElementById("diagnosticsContent");
+  content.innerHTML = "";
+
+  if (!orderResult) { diag.classList.remove("visible"); return; }
+  diag.classList.add("visible");
+  if (!STATE.diagnosticsVisible) {
+    diag.classList.remove("visible");
+  }
+
+  var html = [];
+
+  // Section: strategy
+  var stratP = document.createElement("p");
+  stratP.appendChild(document.createTextNode("Strategy used by Markdown exporter (this view stays in original order unless you tick the timeline-sort box above): "));
+  var stratB = document.createElement("b");
+  stratB.textContent = orderResult.strategy;
+  stratP.appendChild(stratB);
+  stratP.appendChild(document.createTextNode("."));
+  content.appendChild(stratP);
+
+  // Section: lists
+  var ul = document.createElement("ul");
+  function li(label, value) {
+    var l = document.createElement("li");
+    var b = document.createElement("b");
+    b.textContent = label + ": ";
+    l.appendChild(b);
+    l.appendChild(document.createTextNode(String(value)));
+    ul.appendChild(l);
+  }
+  li("Total messages", msgs.length);
+  li("Strategy", orderResult.strategy);
+  li("Branches (regenerated answers)", orderResult.branches.length);
+  li("Missing-parent messages", orderResult.missingParents.length);
+  li("Missing/invalid timestamps", orderResult.missingTimestamps);
+  li("Duplicate timestamp values", orderResult.duplicateTimestamps.length);
+  li("Duplicate IDs", orderResult.duplicateIds.length);
+  content.appendChild(ul);
+
+  // Section: what would change if you sorted by timestamp?
+  var movement = computeMovement(orderResult.strategy === "parent-children" ? _origOrderIndices(msgs) : orderResult.ordered);
+  // Actually we want: compare ORIGINAL array order vs. what buildConversationOrder returned.
+  // Re-derive properly:
+  var origIdx = [];
+  for (var i = 0; i < msgs.length; i++) origIdx.push(i);
+  var moveTable = document.createElement("div");
+  moveTable.className = "move-table";
+  var lines = [];
+  lines.push("If you switch on timeline sort, the following messages would move:");
+  var anyMove = false;
+  for (var j = 0; j < orderResult.ordered.length; j++) {
+    if (orderResult.ordered[j] !== j) {
+      anyMove = true;
+      lines.push("  original #" + orderResult.ordered[j] + "  ->  view position " + j + "  (delta " + (j - orderResult.ordered[j]) + ")");
+    }
+  }
+  if (!anyMove) lines.push("  (no messages would move — array is already in display order)");
+  moveTable.textContent = lines.join("\n");
+  content.appendChild(moveTable);
+
+  // Section: branches list
+  if (orderResult.branches.length > 0) {
+    var bHeader = document.createElement("p");
+    bHeader.appendChild(document.createTextNode("Branches detected (regenerated answers):"));
+    content.appendChild(bHeader);
+    var bTable = document.createElement("div");
+    bTable.className = "move-table";
+    var bLines = [];
+    for (var bi = 0; bi < orderResult.branches.length; bi++) {
+      var br = orderResult.branches[bi];
+      bLines.push("  branch from parent id=" + br.parentId + "  ->  message #" + br.branchIndex + " (" + (msgs[br.branchIndex] && msgs[br.branchIndex].role || "?") + ")");
+    }
+    bTable.textContent = bLines.join("\n");
+    content.appendChild(bTable);
+  }
+
+  // Section: duplicate IDs list
+  if (orderResult.duplicateIds.length > 0) {
+    var dHeader = document.createElement("p");
+    dHeader.appendChild(document.createTextNode("Duplicate message IDs:"));
+    content.appendChild(dHeader);
+    var dTable = document.createElement("div");
+    dTable.className = "move-table";
+    dTable.textContent = orderResult.duplicateIds.map(function(id) { return "  " + id; }).join("\n");
+    content.appendChild(dTable);
+  }
+}
+
+function _origOrderIndices(msgs) {
+  var arr = [];
+  for (var i = 0; i < msgs.length; i++) arr.push(i);
+  return arr;
+}
+
+// --- Search --------------------------------------------------------------
+
+function recomputeSearchMatches() {
+  STATE.searchMatches = [];
+  if (!STATE.searchQuery) return;
+  var chat = getCurrentChat();
+  if (!chat || !Array.isArray(chat.messages)) return;
+  var q = STATE.searchQuery.toLowerCase();
+  for (var i = 0; i < chat.messages.length; i++) {
+    var m = chat.messages[i];
+    if (!m) continue;
+    var body = extractMessageBody(m) || "";
+    if (body.toLowerCase().indexOf(q) !== -1) {
+      STATE.searchMatches.push(i);
+    }
+  }
+  STATE.searchCursor = STATE.searchMatches.length > 0 ? 0 : -1;
+}
+
+function jumpToMatch() {
+  if (STATE.searchMatches.length === 0) return;
+  var idx = STATE.searchMatches[STATE.searchCursor];
+  // Find the rendered card with data-orig-idx=idx
+  var cards = document.querySelectorAll(".message-card");
+  for (var i = 0; i < cards.length; i++) {
+    if (cards[i].getAttribute("data-orig-idx") === String(idx)) {
+      cards[i].scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+  }
+}
+
+// --- Event wiring --------------------------------------------------------
+
+document.getElementById("filePicker").addEventListener("change", function(e) {
+  var file = e.target.files && e.target.files[0];
+  if (file) loadFile(file);
+});
+
+var dropZone = document.getElementById("dropZone");
+dropZone.addEventListener("dragover", function(e) {
+  e.preventDefault();
+  dropZone.classList.add("drag-over");
+});
+dropZone.addEventListener("dragleave", function() {
+  dropZone.classList.remove("drag-over");
+});
+dropZone.addEventListener("drop", function(e) {
+  e.preventDefault();
+  dropZone.classList.remove("drag-over");
+  var file = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+
+document.getElementById("conversationSelect").addEventListener("change", function(e) {
+  STATE.currentChatIndex = parseInt(e.target.value, 10) || 0;
+  renderCurrentChat();
+});
+
+document.getElementById("roleFilter").addEventListener("change", function(e) {
+  STATE.roleFilter = e.target.value;
+  renderCurrentChat();
+});
+
+document.getElementById("timelineSort").addEventListener("change", function(e) {
+  STATE.timelineSort = e.target.checked;
+  renderCurrentChat();
+});
+
+document.getElementById("searchBox").addEventListener("input", function(e) {
+  STATE.searchQuery = e.target.value.trim();
+  recomputeSearchMatches();
+  renderCurrentChat();
+});
+
+document.getElementById("nextMatch").addEventListener("click", function() {
+  if (STATE.searchMatches.length === 0) return;
+  STATE.searchCursor = (STATE.searchCursor + 1) % STATE.searchMatches.length;
+  jumpToMatch();
+  renderCurrentChat();
+});
+
+document.getElementById("prevMatch").addEventListener("click", function() {
+  if (STATE.searchMatches.length === 0) return;
+  STATE.searchCursor = (STATE.searchCursor - 1 + STATE.searchMatches.length) % STATE.searchMatches.length;
+  jumpToMatch();
+  renderCurrentChat();
+});
+
+document.getElementById("firstMsg").addEventListener("click", function() {
+  var list = document.getElementById("messageList");
+  var first = list.querySelector(".message-card");
+  if (first) first.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+document.getElementById("lastMsg").addEventListener("click", function() {
+  var list = document.getElementById("messageList");
+  var cards = list.querySelectorAll(".message-card");
+  if (cards.length > 0) cards[cards.length - 1].scrollIntoView({ behavior: "smooth", block: "end" });
+});
+
+document.getElementById("toggleDiagnostics").addEventListener("click", function() {
+  STATE.diagnosticsVisible = !STATE.diagnosticsVisible;
+  var diag = document.getElementById("diagnostics");
+  if (STATE.diagnosticsVisible) diag.classList.add("visible");
+  else diag.classList.remove("visible");
+});
+
+document.getElementById("viewRaw").addEventListener("click", function() {
+  var pre = document.getElementById("rawModalPre");
+  try { pre.textContent = JSON.stringify(STATE.rawJson, null, 2); }
+  catch (e) { pre.textContent = "(could not stringify: " + e.message + ")"; }
+  document.getElementById("rawModal").classList.add("visible");
+});
+
+document.getElementById("closeRawModal").addEventListener("click", function() {
+  document.getElementById("rawModal").classList.remove("visible");
+});
+
+document.getElementById("rawModal").addEventListener("click", function(e) {
+  if (e.target === this) this.classList.remove("visible");
+});
+
+// Patch: tag messages with diagnostic flags before rendering (for the
+// per-message flag chips). We compute these once per render.
+function _annotateMessages(msgs) {
+  // Build id-set for parent lookup
+  var idSet = {};
+  for (var i = 0; i < msgs.length; i++) {
+    if (msgs[i] && msgs[i].id !== undefined && msgs[i].id !== null) {
+      idSet[String(msgs[i].id)] = true;
+    }
+  }
+  var idSeen = {};
+  for (var j = 0; j < msgs.length; j++) {
+    var m = msgs[j];
+    if (!m) continue;
+    // _parent_found
+    m._parent_found = (m.parent_id === undefined || m.parent_id === null || m.parent_id === "" || idSet[String(m.parent_id)]);
+    // _duplicate_id
+    if (m.id !== undefined && m.id !== null) {
+      var idStr = String(m.id);
+      if (idSeen[idStr]) m._duplicate_id = true;
+      else { idSeen[idStr] = true; m._duplicate_id = false; }
+    } else {
+      m._duplicate_id = false;
+    }
+  }
+}
+
+// Hook renderCurrentChat to annotate messages first.
+var _origRenderCurrentChat = renderCurrentChat;
+renderCurrentChat = function() {
+  var chat = getCurrentChat();
+  if (chat && Array.isArray(chat.messages)) {
+    _annotateMessages(chat.messages);
+  }
+  _origRenderCurrentChat();
+  // After render: stamp data-orig-idx on each card so jumpToMatch can find them.
+  var cards = document.querySelectorAll(".message-card");
+  // We need the original index. Re-derive from displayOrder:
+  var msgs = chat && Array.isArray(chat.messages) ? chat.messages : [];
+  var displayOrder;
+  if (STATE.timelineSort) {
+    displayOrder = buildConversationOrder(msgs).ordered;
+  } else {
+    displayOrder = [];
+    for (var i = 0; i < msgs.length; i++) displayOrder.push(i);
+  }
+  var cardIdx = 0;
+  for (var m = 0; m < displayOrder.length; m++) {
+    var origIdx = displayOrder[m];
+    var msg = msgs[origIdx];
+    if (!msg) continue;
+    // Filter check (must match renderMessageCard logic)
+    var role = msg.role;
+    if (STATE.roleFilter !== "all") {
+      if (STATE.roleFilter === "user" && role !== "user") continue;
+      if (STATE.roleFilter === "assistant" && role !== "assistant") continue;
+      if (STATE.roleFilter === "other" && (role === "user" || role === "assistant" || !role)) continue;
+      if (STATE.roleFilter === "missing" && !isMissingMessage(msg)) continue;
+    }
+    if (cards[cardIdx]) {
+      cards[cardIdx].setAttribute("data-orig-idx", String(origIdx));
+    }
+    cardIdx++;
+  }
+};
+
+// Initial state
+setStatus("Ready. Pick a .json export file or drag one here.", "");
+
+// Prevent accidental data exfiltration: refuse to load any external
+// resource. The viewer is local-only by design.
+window.addEventListener("beforeunload", function() {
+  // Nothing — no network state to clean up since we never made any.
+});
+</script>
+
+</body>
+</html>

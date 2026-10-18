@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-10-18
+
+### Fixed
+- **Markdown conversation order**: previously, Markdown and TXT exports
+  rendered messages in whatever order `Object.keys()` happened to return
+  from the chat's `messages` map — which was often NOT the conversation's
+  real timeline. The exporter now uses a parent/children DFS traversal
+  (using `parent_id` / `children_ids`) to walk the conversation tree from
+  its root, with a stable timestamp sort as a fallback when those fields
+  are absent. Branches (regenerated answers) are preserved and shown
+  after the main chain with an explicit marker — never silently dropped.
+- **`normalizeMessage` now preserves `parent_id` and `children_ids`**
+  when present in the raw API response, so the JSON archive contains
+  enough information to reconstruct the conversation timeline later.
+  JSON output remains structurally identical to 1.0.2 (no existing
+  fields renamed or dropped).
+
+### Added
+- New `src/lib/order.js` with `buildConversationOrder()` — a
+  standalone, testable helper that returns the display order plus
+  diagnostic info (missing parents, duplicate timestamps, duplicate IDs,
+  branches, "what would change if sorted by timestamp" movement list).
+- `tools/zai-json-viewer.html` — a fully local, single-file HTML tool
+  for inspecting exported JSON conversations. Loads `.json` files via
+  file picker or drag & drop, parses them in the browser, and displays
+  them as chat bubbles. Default view is STRICTLY in the JSON's original
+  array order — it does NOT auto-reorder, so any exporter ordering bug
+  is visible. Optional timeline-sort toggle (off by default). Diagnostics
+  panel shows missing parents, duplicate IDs, missing timestamps, and
+  which messages would move if timeline-sorted. All message text is
+  rendered via `textContent` so HTML/script tags inside JSON bodies are
+  displayed as text, never executed. No network, no CDN, no telemetry.
+- 38 new tests covering conversation ordering (all 8 required scenarios
+  through actual Markdown output) and JSON viewer logic (all 10
+  required scenarios). Total test count: 121.
+
+### Changed
+- Markdown / TXT exporters now use `buildConversationOrder()` for
+  display order. JSON exporter is unchanged (preserves original array
+  order).
+- Markdown per-message header now includes the original array index
+  `[#N]` so a reader can correlate the Markdown with the JSON's raw
+  order.
+- Markdown now includes a diagnostic note at the top of each chat when
+  any non-trivial ordering decision was made (strategy used, branches,
+  missing parents, missing/duplicate timestamps, duplicate IDs).
+
+### Notes
+- Long-conversation JSON completeness is **automated-test-passing only
+  against mocked APIs**; real Z.ai long-conversation behavior has not
+  been verified end-to-end with a live account. The fix in 1.0.2
+  (chunked batching with retry) is still expected to help, but
+  "long-conversation integrity" is marked as **pending real-world
+  verification**.
+
 ## [1.0.2] - 2026-10-18
 
 ### Fixed

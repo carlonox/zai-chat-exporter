@@ -1,10 +1,16 @@
 // Three exporters, three use cases:
-// - JSON: lossless backup. Everything goes in here.
-// - Markdown: human-readable. Great for sharing on GitHub or Notion.
-// - Plain Text: raw and simple. Works everywhere.
+// - JSON: lossless backup. Everything goes in here. Messages are kept in
+//   their original array order — the archive must reflect what the API
+//   actually returned, not a presentation reordering.
+// - Markdown: human-readable. Messages are reordered by
+//   buildConversationOrder() so the conversation reads top-to-bottom.
+// - Plain Text: raw and simple. Same reordering as Markdown.
 //
 // CommonJS so it can be require()-d from Node tests. esbuild still bundles
 // these for the browser build (it handles ESM→CJS interop transparently).
+
+var order = require("./order.js");
+var buildConversationOrder = order.buildConversationOrder;
 
 // --- Message body extraction -------------------------------------------------
 
@@ -177,6 +183,12 @@ function toJSON(conversations) {
 
 // Markdown with collapsible <details> for reasoning sections.
 // Clean enough to read directly, structured enough to navigate.
+//
+// Messages are reordered by buildConversationOrder() so the conversation
+// reads top-to-bottom in the order a human would expect (parent → child
+// traversal, timestamp fallback for ties, branches preserved as
+// post-main-chain blocks). The JSON exporter does NOT reorder — the
+// archive stays faithful to what the API returned.
 function toMarkdown(conversations) {
   if (!conversations || conversations.length === 0) {
     return 'No conversations to export.';
@@ -198,13 +210,62 @@ function toMarkdown(conversations) {
       continue;
     }
 
-    for (var m = 0; m < chat.messages.length; m++) {
-      var msg = chat.messages[m];
+    // Reorder for display. The returned `ordered` array contains indices
+    // into chat.messages; we never mutate chat.messages itself.
+    var orderResult = buildConversationOrder(chat.messages);
+    var displayOrder = orderResult.ordered;
+
+    // Diagnostic notes — make any non-trivial reordering visible to the
+    // reader so they understand why the order doesn't match what they
+    // see in chat.z.ai's URL bar (and so the JSON viewer's "what would
+    // change" diagnostic has a written counterpart in the Markdown).
+    if (orderResult.strategy === 'parent-children') {
+      output += '*Ordering: reconstructed from parent_id / children_ids relationships.*\n\n';
+    } else if (orderResult.strategy === 'timestamp') {
+      output += '*Ordering: sorted by timestamp (no parent/child fields available).*\n\n';
+    }
+    if (orderResult.branches.length > 0) {
+      output += '*' + orderResult.branches.length + ' branch(es) detected — likely regenerated answers. Branches are shown after the main chain and marked with their parent message ID.*\n\n';
+    }
+    if (orderResult.missingParents.length > 0) {
+      output += '*' + orderResult.missingParents.length + ' message(s) referenced a parent_id that is not in this chat; treated as conversation root(s).*\n\n';
+    }
+    if (orderResult.missingTimestamps > 0 && orderResult.strategy === 'timestamp') {
+      output += '*' + orderResult.missingTimestamps + ' message(s) had a missing or unparseable timestamp; kept at the end in original order.*\n\n';
+    }
+    if (orderResult.duplicateTimestamps.length > 0) {
+      output += '*' + orderResult.duplicateTimestamps.length + ' duplicate timestamp value(s) detected; ties broken by original array order.*\n\n';
+    }
+    if (orderResult.duplicateIds.length > 0) {
+      output += '*' + orderResult.duplicateIds.length + ' duplicate message ID(s) detected; later occurrences appended at the end.*\n\n';
+    }
+
+    // Map original index -> branch info so we can render a marker at the
+    // start of each branch block.
+    var branchByStart = {};
+    for (var bi = 0; bi < orderResult.branches.length; bi++) {
+      branchByStart[orderResult.branches[bi].branchIndex] = orderResult.branches[bi];
+    }
+
+    for (var m = 0; m < displayOrder.length; m++) {
+      var origIdx = displayOrder[m];
+      var msg = chat.messages[origIdx];
+      var branchInfo = branchByStart[origIdx];
+
+      // Branch marker — clearly separates a regenerated answer from the
+      // main conversation flow.
+      if (branchInfo) {
+        output += '> *Branch from message ID `' + branchInfo.parentId + '` (regenerated / alternative turn)*\n\n';
+      }
+
       var roleLabel = msg.role === 'user' ? 'User' :
                       msg.role === 'assistant' ? 'Assistant' :
                       msg.role;
+      // Include the original array index in the timestamp slot so a reader
+      // can correlate the Markdown with the JSON's raw order if needed.
       var timestamp = msg.timestamp ? ' (' + msg.timestamp + ')' : '';
-      output += '### ' + roleLabel + timestamp + '\n\n';
+      var indexLabel = ' [#' + origIdx + ']';
+      output += '### ' + roleLabel + timestamp + indexLabel + '\n\n';
 
       if (msg.model) {
         output += '*Model: ' + msg.model + '*\n\n';
@@ -235,6 +296,7 @@ function toMarkdown(conversations) {
 
 // No formatting, no metadata, just messages.
 // Useful for quick copy-paste or feeding into another tool.
+// Uses the same reordering as Markdown so the two never disagree.
 function toPlainText(conversations) {
   if (!conversations || conversations.length === 0) {
     return 'No conversations to export.';
@@ -255,15 +317,28 @@ function toPlainText(conversations) {
       continue;
     }
 
-    for (var m = 0; m < chat.messages.length; m++) {
-      var msg = chat.messages[m];
-      var roleLabel = msg.role === 'user' ? 'User' :
-                      msg.role === 'assistant' ? 'Assistant' :
-                      msg.role;
-      var timestamp = msg.timestamp ? ' [' + msg.timestamp + ']' : '';
-      output += roleLabel + timestamp + ':\n';
-      var body2 = extractMessageBody(msg);
-      output += (body2 !== '' ? body2 : _emptyPlaceholder(msg)) + '\n\n';
+    var orderResult2 = buildConversationOrder(chat.messages);
+    var displayOrder2 = orderResult2.ordered;
+    var branchByStart2 = {};
+    for (var bi2 = 0; bi2 < orderResult2.branches.length; bi2++) {
+      branchByStart2[orderResult2.branches[bi2].branchIndex] = orderResult2.branches[bi2];
+    }
+
+    for (var m = 0; m < displayOrder2.length; m++) {
+      var origIdx2 = displayOrder2[m];
+      var msg2 = chat.messages[origIdx2];
+      var branchInfo2 = branchByStart2[origIdx2];
+      if (branchInfo2) {
+        output += '  [branch from ' + branchInfo2.parentId + ']\n';
+      }
+      var roleLabel2 = msg2.role === 'user' ? 'User' :
+                      msg2.role === 'assistant' ? 'Assistant' :
+                      msg2.role;
+      var timestamp2 = msg2.timestamp ? ' [' + msg2.timestamp + ']' : '';
+      var indexLabel2 = ' [#' + origIdx2 + ']';
+      output += roleLabel2 + timestamp2 + indexLabel2 + ':\n';
+      var body2 = extractMessageBody(msg2);
+      output += (body2 !== '' ? body2 : _emptyPlaceholder(msg2)) + '\n\n';
     }
 
     output += '\n\n';
