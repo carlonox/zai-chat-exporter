@@ -1,4 +1,16 @@
-﻿var API_BASE = "https://chat.z.ai/api/v1";
+﻿// select.js — window for picking specific chats to export.
+//
+// Refactored to use the shared lib/ modules so the markdown / plain-text /
+// JSON formatting logic is identical to popup.js. This was previously a
+// second copy of the same code with the same "msg.content || '[Empty]'"
+// bug — fixing both sites centrally prevents future drift.
+//
+// select.js stays ESM (uses `import`) so esbuild's IIFE bundler treats it
+// as a proper entry point. The lib files (api.js, exporters.js) are CommonJS
+// — esbuild handles the ESM→CJS interop transparently when bundling.
+import { toMarkdown, toPlainText } from "../lib/exporters.js";
+
+var API_BASE = "https://chat.z.ai/api/v1";
 var allChats = [];
 var selectedIds = {};
 var authToken = null;
@@ -98,6 +110,141 @@ function updateCount() {
   btn.textContent = "Export Selected (" + count + ")";
 }
 
+// Helpers shared with popup.js. Kept here for the bundled select.js context.
+// (esbuild inlines these into the IIFE — no cross-window globals needed.)
+function normalizeMessage(msg) {
+  if (!msg || typeof msg !== "object") return null;
+  var blocks = Array.isArray(msg.content_blocks) ? msg.content_blocks : [];
+  var rBlock = null;
+  for (var b = 0; b < blocks.length; b++) {
+    if (blocks[b] && blocks[b].type === "reasoning") { rBlock = blocks[b]; break; }
+  }
+  return {
+    id: msg.id !== undefined ? msg.id : null,
+    role: msg.role !== undefined ? msg.role : null,
+    content: msg.content !== undefined ? msg.content : null,
+    reasoning: rBlock ? rBlock.content : null,
+    content_blocks: blocks,
+    timestamp: msg.timestamp ? new Date(msg.timestamp * 1000).toISOString() : null,
+    model: msg.model || null,
+    usage: msg.usage || null,
+    done: msg.done || false
+  };
+}
+
+// Fetch + normalize one chat, with chunked batch fetching and missing-ID
+// reporting. Mirrors popup.js's fetchChatConversation but reports per-chat
+// incompleteness back to the select window UI so the user can retry or
+// abort rather than silently accept a partial export.
+function fetchChatConversation(token, chatSummary) {
+  return fetch(API_BASE + "/chats/" + chatSummary.id, {
+    headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }
+  }).then(function(r) {
+    if (!r.ok) throw new Error("Chat details HTTP " + r.status);
+    return r.json();
+  }).then(function(det) {
+    var msgMap = (det && det.chat && det.chat.history && det.chat.history.messages)
+      ? det.chat.history.messages
+      : {};
+    var orderedIds = Object.keys(msgMap);
+    if (orderedIds.length === 0) {
+      return {
+        id: det.id !== undefined ? det.id : chatSummary.id,
+        title: det.title || chatSummary.title || "Untitled",
+        created_at: det.created_at ? new Date(det.created_at * 1000).toISOString() : null,
+        updated_at: det.updated_at ? new Date(det.updated_at * 1000).toISOString() : null,
+        messages: [],
+        _incomplete: false
+      };
+    }
+
+    // Chunk the IDs to avoid sending one huge POST body.
+    var BATCH_SIZE = 50;
+    var MAX_RETRIES = 3;
+    var merged = {};
+    var missingIds = [];
+    var batchErrors = [];
+    var returnedSeen = {};
+
+    function fetchBatch(batchIds, attempt) {
+      return fetch(API_BASE + "/chats/" + chatSummary.id + "/messages/batch", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: batchIds })
+      }).then(function(r) {
+        if (!r.ok) {
+          var err = new Error("Batch HTTP " + r.status);
+          throw err;
+        }
+        return r.json();
+      }).then(function(d) {
+        return (d && d.data && typeof d.data === "object") ? d.data : (d || {});
+      }).catch(function(err) {
+        if (attempt < MAX_RETRIES) {
+          var delay = 500 * Math.pow(2, attempt - 1);
+          return new Promise(function(res) { setTimeout(res, delay); })
+            .then(function() { return fetchBatch(batchIds, attempt + 1); });
+        }
+        batchErrors.push(err && err.message ? err.message : String(err));
+        return {};
+      });
+    }
+
+    var chain = Promise.resolve();
+    for (var i = 0; i < orderedIds.length; i += BATCH_SIZE) {
+      (function(batchIds) {
+        chain = chain.then(function() {
+          return fetchBatch(batchIds, 1).then(function(batchData) {
+            for (var k in batchData) {
+              if (!Object.prototype.hasOwnProperty.call(batchData, k)) continue;
+              var msg = batchData[k];
+              var realId = (msg && msg.id !== undefined && msg.id !== null)
+                ? String(msg.id)
+                : String(k);
+              if (returnedSeen[realId]) continue;
+              returnedSeen[realId] = true;
+              merged[realId] = msg;
+            }
+          });
+        });
+      })(orderedIds.slice(i, i + BATCH_SIZE));
+    }
+
+    return chain.then(function() {
+      for (var j = 0; j < orderedIds.length; j++) {
+        if (!returnedSeen[orderedIds[j]]) missingIds.push(orderedIds[j]);
+      }
+      var incomplete = (missingIds.length > 0 || batchErrors.length > 0);
+
+      var messages = [];
+      for (var m = 0; m < orderedIds.length; m++) {
+        var id = orderedIds[m];
+        var raw = merged[id];
+        if (raw === undefined) {
+          messages.push({
+            id: id, role: null, content: null, reasoning: null,
+            content_blocks: [], timestamp: null, model: null, usage: null,
+            done: false, _export_status: "missing"
+          });
+        } else {
+          var norm = normalizeMessage(raw);
+          if (norm) messages.push(norm);
+        }
+      }
+
+      return {
+        id: det.id !== undefined ? det.id : chatSummary.id,
+        title: det.title || chatSummary.title || "Untitled",
+        created_at: det.created_at ? new Date(det.created_at * 1000).toISOString() : null,
+        updated_at: det.updated_at ? new Date(det.updated_at * 1000).toISOString() : null,
+        messages: messages,
+        _incomplete: incomplete,
+        _missingIds: missingIds,
+        _batchErrors: batchErrors
+      };
+    });
+  });
+}
 
 document.addEventListener("DOMContentLoaded", function() {
   var searchInput = document.getElementById("searchInput");
@@ -182,45 +329,21 @@ document.addEventListener("DOMContentLoaded", function() {
     exportBtn.disabled = true;
 
     var chatPromises = ids.map(function(id) {
-      return fetch(API_BASE + "/chats/" + id, {
-        headers: { Authorization: "Bearer " + authToken, "Content-Type": "application/json" }
-      }).then(function(r) { return r.json(); }).then(function(detail) {
-        var msgIds = Object.keys(detail.chat && detail.chat.history && detail.chat.history.messages
-          ? detail.chat.history.messages : {});
-        if (msgIds.length === 0) {
-          return { id: id, title: detail.title || "Untitled", messages: [] };
-        }
-        return fetch(API_BASE + "/chats/" + id + "/messages/batch", {
-          method: "POST",
-          headers: { Authorization: "Bearer " + authToken, "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: msgIds })
-        }).then(function(r) { return r.json(); }).then(function(batch) {
-          var msgs = batch.data || {};
-          return {
-            id: id,
-            title: detail.title || "Untitled",
-            created_at: detail.created_at ? new Date(detail.created_at * 1000).toISOString() : null,
-            updated_at: detail.updated_at ? new Date(detail.updated_at * 1000).toISOString() : null,
-            messages: Object.values(msgs).map(function(m) {
-              var blocks = m.content_blocks || [];
-              var rBlock = null;
-              for (var b = 0; b < blocks.length; b++) {
-                if (blocks[b].type === "reasoning") { rBlock = blocks[b]; break; }
-              }
-              return {
-                id: m.id, role: m.role, content: m.content,
-                reasoning: rBlock ? rBlock.content : null,
-                content_blocks: blocks,
-                timestamp: m.timestamp ? new Date(m.timestamp * 1000).toISOString() : null,
-                model: m.model || null, usage: m.usage || null
-              };
-            })
-          };
-        });
-      });
+      return fetchChatConversation(authToken, { id: id });
     });
 
     Promise.all(chatPromises).then(function(chats) {
+      var incomplete = chats.filter(function(c) { return c._incomplete; });
+      for (var i = 0; i < chats.length; i++) {
+        // Strip the internal diagnostic fields from the final JSON output
+        // unless incomplete — the user doesn't need them otherwise.
+        if (!chats[i]._incomplete) {
+          delete chats[i]._incomplete;
+          delete chats[i]._missingIds;
+          delete chats[i]._batchErrors;
+        }
+      }
+
       var content;
       if (format === "json") {
         content = JSON.stringify(chats, null, 2);
@@ -242,7 +365,21 @@ document.addEventListener("DOMContentLoaded", function() {
       link.href = url; link.download = fname;
       document.body.appendChild(link); link.click(); document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      setStatus("Exported " + chats.length + " conversations as " + format.toUpperCase(), "success");
+
+      if (incomplete.length > 0) {
+        var totalMissing = 0;
+        for (var ix = 0; ix < incomplete.length; ix++) {
+          totalMissing += (incomplete[ix]._missingIds || []).length;
+        }
+        setStatus(
+          "Exported " + chats.length + " conversations as " + format.toUpperCase() +
+            " BUT " + incomplete.length + " chat(s) had " + totalMissing +
+            " missing message(s). See JSON _export_status fields.",
+          "error"
+        );
+      } else {
+        setStatus("Exported " + chats.length + " conversations as " + format.toUpperCase(), "success");
+      }
     }).catch(function(err) {
       setStatus("Export failed: " + err.message, "error");
     }).finally(function() {
@@ -250,42 +387,3 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   });
 });
-
-function toMarkdown(chats) {
-  var out = "";
-  for (var c = 0; c < chats.length; c++) {
-    var chat = chats[c];
-    out += "# " + (chat.title || "Untitled Chat") + "\n\n";
-    out += "**ID:** `" + chat.id + "`\n";
-    out += "**Created:** " + (chat.created_at || "Unknown") + "\n\n---\n\n";
-    if (!chat.messages || chat.messages.length === 0) { out += "*No messages.*\n\n"; continue; }
-    for (var m = 0; m < chat.messages.length; m++) {
-      var msg = chat.messages[m];
-      var role = msg.role === "user" ? "User" : msg.role === "assistant" ? "Assistant" : msg.role;
-      out += "### " + role + (msg.timestamp ? " (" + msg.timestamp + ")" : "") + "\n\n";
-      if (msg.model) out += "*Model: " + msg.model + "*\n\n";
-      out += (msg.content || "[Empty message]") + "\n\n";
-      if (msg.reasoning) out += "<details><summary>Reasoning</summary>\n\n" + msg.reasoning + "\n\n</details>\n\n";
-      out += "---\n\n";
-    }
-  }
-  return out;
-}
-
-function toPlainText(chats) {
-  var out = "";
-  for (var c = 0; c < chats.length; c++) {
-    var chat = chats[c];
-    out += "== " + (chat.title || "Untitled Chat") + " ==\n";
-    out += "ID: " + chat.id + "\n";
-    out += "Created: " + (chat.created_at || "Unknown") + "\n\n";
-    if (!chat.messages || chat.messages.length === 0) { out += "No messages.\n\n"; continue; }
-    for (var m = 0; m < chat.messages.length; m++) {
-      var msg = chat.messages[m];
-      var role = msg.role === "user" ? "User" : msg.role === "assistant" ? "Assistant" : msg.role;
-      out += role + (msg.timestamp ? " [" + msg.timestamp + "]" : "") + ":\n";
-      out += (msg.content || "[Empty message]") + "\n\n";
-    }
-  }
-  return out;
-}

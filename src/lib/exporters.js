@@ -2,6 +2,173 @@
 // - JSON: lossless backup. Everything goes in here.
 // - Markdown: human-readable. Great for sharing on GitHub or Notion.
 // - Plain Text: raw and simple. Works everywhere.
+//
+// CommonJS so it can be require()-d from Node tests. esbuild still bundles
+// these for the browser build (it handles ESM→CJS interop transparently).
+
+// --- Message body extraction -------------------------------------------------
+
+// Block types we explicitly DO NOT treat as final-answer text.
+// Anything not in this list is considered "answer-like" and will be included
+// by extractMessageBody(). This is intentionally a small, conservative list —
+// when in doubt we err on the side of including text rather than dropping
+// content the user wants to see.
+var NON_ANSWER_BLOCK_TYPES = {
+  // reasoning / chain-of-thought
+  "reasoning": true,
+  "thinking": true,
+  "thought": true,
+  "reflection": true,
+  "plan": true,
+  // tool calls (Anthropic/OpenAI style)
+  "tool_use": true,
+  "tool_result": true,
+  "tool_call": true,
+  "function_call": true,
+  "function": true,
+  // non-text media
+  "image": true,
+  "image_url": true,
+  "file": true,
+  "audio": true,
+  "video": true,
+  // meta / system / errors
+  "system": true,
+  "error": true,
+  "metadata": true
+};
+
+// Read a single block's textual payload, tolerating several field shapes.
+// Returns "" if no usable string was found.
+function _readBlockText(block) {
+  if (!block || typeof block !== "object") return "";
+  // Common field names seen in various providers' content-block schemas.
+  var v = (block.content !== undefined) ? block.content
+        : (block.text !== undefined) ? block.text
+        : (block.value !== undefined) ? block.value
+        : (block.data !== undefined) ? block.data
+        : "";
+  if (typeof v === "string") return v;
+  if (Array.isArray(v)) {
+    var parts = [];
+    for (var i = 0; i < v.length; i++) {
+      if (typeof v[i] === "string" && v[i].trim() !== "") {
+        parts.push(v[i]);
+      } else if (v[i] && typeof v[i] === "object") {
+        var sub = _readBlockText(v[i]);
+        if (sub) parts.push(sub);
+      }
+    }
+    return parts.join("\n");
+  }
+  if (v && typeof v === "object") {
+    if (typeof v.text === "string" && v.text.trim() !== "") return v.text;
+    if (typeof v.content === "string" && v.content.trim() !== "") return v.content;
+  }
+  return "";
+}
+
+// Returns true if a block of the given type should be considered "answer text"
+// (as opposed to reasoning, tool calls, images, etc.).
+// Undefined/unknown types default to true — we'd rather surface mystery text
+// than silently drop it.
+function _isAnswerLikeBlock(type) {
+  if (type === undefined || type === null) return true;
+  var t = String(type).toLowerCase();
+  return !NON_ANSWER_BLOCK_TYPES[t];
+}
+
+// Unified, defensive message-body extractor.
+//
+// Priority:
+//   1. msg.content as a non-empty string.
+//   2. msg.content as an array of parts (strings or {type, text/content}).
+//   3. msg.content_blocks — concatenate every answer-like block's text,
+//      skipping reasoning/tool/image/etc.
+//   4. Truly empty -> return "" (callers decide how to mark this).
+//
+// IMPORTANT: this function NEVER touches reasoning, content_blocks, model,
+// usage, timestamps or any other field on the input object. It is read-only.
+// The JSON exporter preserves all original fields; this function only decides
+// what text to show in Markdown/TXT.
+function extractMessageBody(msg) {
+  if (!msg || typeof msg !== "object") return "";
+
+  // 1. msg.content as a string.
+  if (typeof msg.content === "string" && msg.content.trim() !== "") {
+    return msg.content;
+  }
+
+  // 2. msg.content as an array of parts.
+  if (Array.isArray(msg.content)) {
+    var parts = [];
+    for (var i = 0; i < msg.content.length; i++) {
+      var part = msg.content[i];
+      if (typeof part === "string" && part.trim() !== "") {
+        parts.push(part);
+      } else if (part && typeof part === "object") {
+        if (!_isAnswerLikeBlock(part.type)) continue;
+        var t = _readBlockText(part);
+        if (t) parts.push(t);
+      }
+    }
+    if (parts.length > 0) return parts.join("\n\n");
+  }
+
+  // 3. content_blocks
+  if (Array.isArray(msg.content_blocks)) {
+    var blocks = msg.content_blocks;
+    var texts = [];
+    for (var j = 0; j < blocks.length; j++) {
+      var block = blocks[j];
+      if (!block || typeof block !== "object") continue;
+      if (!_isAnswerLikeBlock(block.type)) continue;
+      var txt = _readBlockText(block);
+      if (txt) texts.push(txt);
+    }
+    if (texts.length > 0) return texts.join("\n\n");
+  }
+
+  // 4. Empty.
+  return "";
+}
+
+// Extract reasoning text from a message — used by Markdown/TXT exporters as
+// a fallback when the caller hasn't pre-populated msg.reasoning (which
+// popup.js's normalizeMessage does, but raw message objects from other paths
+// may not). Mirrors the normalizeMessage reasoning-extraction logic so both
+// code paths agree on what counts as "the reasoning section".
+function extractReasoning(msg) {
+  if (!msg || typeof msg !== "object") return "";
+  if (typeof msg.reasoning === "string" && msg.reasoning.trim() !== "") {
+    return msg.reasoning;
+  }
+  if (Array.isArray(msg.content_blocks)) {
+    var parts = [];
+    for (var i = 0; i < msg.content_blocks.length; i++) {
+      var block = msg.content_blocks[i];
+      if (!block || typeof block !== "object") continue;
+      var bt = block.type;
+      if (bt === "reasoning" || bt === "thinking" || bt === "thought") {
+        var txt = _readBlockText(block);
+        if (txt) parts.push(txt);
+      }
+    }
+    if (parts.length > 0) return parts.join("\n\n");
+  }
+  return "";
+}
+
+// Build the explicit placeholder shown in Markdown/TXT when a message has
+// no recoverable body text. Never used inside the JSON output.
+function _emptyPlaceholder(msg) {
+  var id = (msg && msg.id !== undefined && msg.id !== null) ? String(msg.id) : "unknown";
+  var role = (msg && msg.role !== undefined && msg.role !== null) ? String(msg.role) : "unknown";
+  return "[Empty message (id: " + id + ", role: " + role + ")]";
+}
+
+// --- Exporters ---------------------------------------------------------------
+
 // JSON preserves all data: messages, reasoning, metadata, token usage.
 // Best for: backup, migration, programmatic analysis.
 function toJSON(conversations) {
@@ -43,11 +210,13 @@ function toMarkdown(conversations) {
         output += '*Model: ' + msg.model + '*\n\n';
       }
 
-      output += (msg.content || '[Empty message]') + '\n\n';
+      var body = extractMessageBody(msg);
+      output += (body !== '' ? body : _emptyPlaceholder(msg)) + '\n\n';
 
-      if (msg.reasoning) {
+      var reasoning = extractReasoning(msg);
+      if (reasoning) {
         output += '<details>\n<summary>Reasoning</summary>\n\n';
-        output += msg.reasoning + '\n\n';
+        output += reasoning + '\n\n';
         output += '</details>\n\n';
       }
 
@@ -93,7 +262,8 @@ function toPlainText(conversations) {
                       msg.role;
       var timestamp = msg.timestamp ? ' [' + msg.timestamp + ']' : '';
       output += roleLabel + timestamp + ':\n';
-      output += (msg.content || '[Empty message]') + '\n\n';
+      var body2 = extractMessageBody(msg);
+      output += (body2 !== '' ? body2 : _emptyPlaceholder(msg)) + '\n\n';
     }
 
     output += '\n\n';
@@ -152,4 +322,12 @@ function downloadExport(data, format, filename) {
   URL.revokeObjectURL(url);
 }
 
-export { toJSON, toMarkdown, toPlainText, EXPORTERS, downloadExport };
+module.exports = {
+  toJSON: toJSON,
+  toMarkdown: toMarkdown,
+  toPlainText: toPlainText,
+  extractMessageBody: extractMessageBody,
+  extractReasoning: extractReasoning,
+  EXPORTERS: EXPORTERS,
+  downloadExport: downloadExport
+};

@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Z.ai Chat Exporter",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Export your Z.ai conversations to JSON, Markdown, or plain text. Preserves reasoning, metadata, and message structure.",
   "author": "Carlos Javier Cuervo",
   "homepage_url": "https://github.com/carlonox/zai-chat-exporter",
