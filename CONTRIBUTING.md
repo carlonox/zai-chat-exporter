@@ -1,49 +1,37 @@
 # Contributing
 
-Thanks for stopping by. If you're reading this, you're already the kind of person I built this for.
+Thanks for wanting to help. This extension already ships on Chrome Web Store and Firefox Add-ons, so a careless merge reaches real users.
 
-## Code of Conduct
+## Before writing code
 
-- Be respectful. Assume good intent.
-- Focus on the code, not the person.
-- If something feels off, say it constructively.
+- **Open an issue first** for new features, changes to permissions, or anything that touches how conversations are parsed. It keeps us from reviewing 800 lines built on a wrong assumption.
+- Typos, docs and obvious fixes: send the PR directly.
 
-## Getting Started
+## What a PR must contain
 
-If you're new to browser extension development, start with `src/popup/popup.js` — it's the entry point and the easiest to understand. The whole flow starts there.
+The PR body answers four questions (the template asks):
 
-### Reporting Bugs
+1. **What changes** — two or three lines.
+2. **Why** — the real problem, not the solution you like.
+3. **How you tested it** — command, test, or manual steps. "I did not test it" is a valid answer; lying is not.
+4. **Risk** — what can break and how to revert it.
 
-1. Check [open issues](https://github.com/carlonox/zai-chat-exporter/issues) first.
-2. If it's new, open one. Tell me:
-   - What you expected
-   - What actually happened
-   - Browser + OS
-   - A screenshot if it helps
+Also:
 
-### Suggesting Features
+- **One PR, one topic.** A refactor and a feature in the same PR review badly and revert worse.
+- **Conventional Commits 1.0.0** in messages (`type(scope): imperative`, max 72 chars).
+- **No secrets**: no tokens, keys or `.env` files.
+- **Docs ship with the code** that needs them.
+- **Versioning**: if the change is user-facing, bump the version and add a CHANGELOG entry. Merging without publishing leaves the repo and the stores out of sync.
 
-Open an issue with the label "enhancement". Tell me what you're trying to do — I might have a workaround, or it might be the next feature.
+## Tests
 
-### Pull Requests
+`npm test` runs the suite. Say what you ran. If a change affects the exported Markdown or JSON, include a fixture or a test for it.
 
-1. Fork the repo, create a branch from `main`.
-2. Use semantic commits (`feat:`, `fix:`, `docs:`).
-3. Test in both Firefox and Chrome before submitting.
-4. In the PR description, add a sentence about what you changed and why — it helps me review faster.
+## Review
 
-### Style Guide
+Everything lands through a PR. An automated reviewer (Kiro) comments and publishes the `kiro-review` status; a human decides the merge.
 
-- Use `var` for variable declarations (safest cross-browser compat without transpilation).
-- Use `function` declarations for named functions.
-- 2 spaces for indentation.
-- Single quotes for strings.
-- Add comments that explain **why**, not what. The code already says what.
+## Licence
 
-## Thanks
-
-Special thanks to the Z.ai community for their feedback and support during development. This project wouldn't be what it is without you.
-
-## Questions?
-
-Open a [Discussion](https://github.com/carlonox/zai-chat-exporter/discussions).
+By opening a PR you agree that your contribution is published under the repository's licence (MIT).
