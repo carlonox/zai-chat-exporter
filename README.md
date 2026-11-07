@@ -167,6 +167,12 @@ This project is licensed under the MIT License -- see the [LICENSE](LICENSE) fil
 
 ---
 
+## Contributors
+
+- **[@a23bc](https://github.com/a23bc)** — recovered in v1.0.4: batched fetching for long conversations, Agent-mode empty replies, the Markdown `</details>` artefact and Tool Calls rendering in the viewer. Original work in their fork, upstreamed in [#2](https://github.com/carlonox/zai-chat-exporter/pull/2).
+
+---
+
 ## Author
 
 **Carlos Javier Cuervo Baracaldo**

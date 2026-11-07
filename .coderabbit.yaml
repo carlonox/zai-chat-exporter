@@ -1,0 +1,8 @@
+# CodeRabbit disabled on 2026-11-06: reviews were inconsistent and it asked
+# for manual "Trigger review" clicks. Re-enable by deleting this file or
+# setting auto_review.enabled: true.
+reviews:
+  auto_review:
+    enabled: false
+chat:
+  auto_reply: false
