@@ -57,9 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   behavior — the exporter faithfully preserves raw bytes; the fix
   wraps such content in a code block to visually distinguish it from
   structural HTML.
-- Real Z.ai long-conversation behavior is **still pending real-world
-  verification**; only mocked-API tests are passing. No claim of
-  end-to-end real-Z.ai verification is made.
+- Long-conversation behavior was verified end to end on **one real Z.ai
+  account** (2026-11-05, by @a23bc). It is not widely confirmed: if an
+  export still comes out short, report the issue with the chat size.
 
 ## [1.0.3] - 2026-10-18
 
@@ -109,12 +109,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   missing parents, missing/duplicate timestamps, duplicate IDs).
 
 ### Notes
-- Long-conversation JSON completeness is **automated-test-passing only
-  against mocked APIs**; real Z.ai long-conversation behavior has not
-  been verified end-to-end with a live account. The fix in 1.0.2
-  (chunked batching with retry) is still expected to help, but
-  "long-conversation integrity" is marked as **pending real-world
-  verification**.
+- Long-conversation JSON completeness was tested against mocked APIs at
+  the time of this entry. The fix in 1.0.2 (chunked batching with retry)
+  was later verified end to end on one real account; see the 1.0.4 notes.
 
 ## [1.0.2] - 2026-10-18
 

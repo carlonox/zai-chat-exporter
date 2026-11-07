@@ -66,16 +66,27 @@ I've been using Z.ai (for its GLM models) since its early days — it's a powerf
    cd zai-chat-exporter
    ```
 
-2. **For Firefox**: load the `src/` folder as a temporary add-on:
-   - Open `about:debugging`
-   - Click "This Firefox" → "Load Temporary Add-on"
-   - Select `src/manifest.firefox.json`
+2. Build the extension (Node.js 18 or newer):
 
-3. **For Edge/Chrome**: load the unpacked extension:
-   - Open `chrome://extensions/` or `edge://extensions/`
-   - Enable "Developer mode"
-   - Click "Load unpacked"
-   - Select the `src/` folder
+   ```bash
+   npm ci
+   npm run build
+   ```
+
+   Output goes to `dist/`. See `BUILD.md` for what the build does.
+
+3. **For Firefox** (Manifest V2): open `about:debugging`, click "This Firefox"
+   and "Load Temporary Add-on", then select `dist/manifest.json`.
+
+4. **For Chrome/Edge** (Manifest V3): the build writes the Firefox manifest to
+   `dist/manifest.json`, so copy the MV3 one first:
+
+   ```bash
+   cp src/manifest.edge.json dist/manifest.json
+   ```
+
+   Then open `chrome://extensions/` or `edge://extensions/`, enable
+   "Developer mode", click "Load unpacked" and select the `dist/` folder.
 
 ---
 
