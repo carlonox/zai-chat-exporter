@@ -1,4 +1,4 @@
-﻿function extractChatIdFromUrl(url) {
+function extractChatIdFromUrl(url) {
   if (!url) return null;
   var match = url.match(/\/c\/([a-f0-9-]{36})/i);
   return match ? match[1] : null;
@@ -52,4 +52,10 @@ function isExtensionContext() {
     (!!chrome.runtime || !!chrome.tabs);
 }
 
-export { extractChatIdFromUrl, formatTimestamp, sanitizeFilename, debounce, isExtensionContext };
+module.exports = {
+  extractChatIdFromUrl: extractChatIdFromUrl,
+  formatTimestamp: formatTimestamp,
+  sanitizeFilename: sanitizeFilename,
+  debounce: debounce,
+  isExtensionContext: isExtensionContext
+};
