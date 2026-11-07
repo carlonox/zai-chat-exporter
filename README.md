@@ -4,8 +4,8 @@
 
 # Z.ai Chat Exporter
 
-[![Firefox Add-on](https://img.shields.io/badge/Firefox-Add--on-ff6600)](https://addons.mozilla.org/...)
-[![Edge Add-on](https://img.shields.io/badge/Edge-Add--on-0078D7)](https://microsoftedge.microsoft.com/...)
+[![Chrome Web Store](https://img.shields.io/badge/Chrome-Web%20Store-4285F4)](https://chromewebstore.google.com/detail/zai-chat-exporter/angkjpekkdaflnbcjknfihicbchdkicj)
+[![Firefox Add-on](https://img.shields.io/badge/Firefox-Add--on-ff6600)](https://addons.mozilla.org/en-US/firefox/addon/z-ai-chat-exporter/)
 [![GitHub license](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
 > Export your Z.ai conversations to JSON, Markdown, or plain text. Preserves reasoning, metadata, and message structure.
@@ -55,8 +55,8 @@ I've been using Z.ai (for its GLM models) since its early days — it's a powerf
 
 ### From the store (recommended)
 
-- **Firefox**: [Download from Firefox Add-ons](https://addons.mozilla.org/...)
-- **Edge**: [Download from Edge Add-ons](https://microsoftedge.microsoft.com/...)
+- **Chrome**: [Download from Chrome Web Store](https://chromewebstore.google.com/detail/zai-chat-exporter/angkjpekkdaflnbcjknfihicbchdkicj)
+- **Firefox**: [Download from Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/z-ai-chat-exporter/)
 
 ### Manual installation (development)
 
